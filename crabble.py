@@ -174,7 +174,10 @@ def rep_rack(rack):
     return ''.join(rack)
 
 def rep_words(scored_words):
-    return ','.join(scored_words) 
+    return ','.join(scored_words)
+
+def copy(board):
+    return [row[:] for row in board]
 
 # ********** BEGIN STRATEGIES **********
 
@@ -196,42 +199,74 @@ def random_strat(valid_plays, board, rack, unseen):
 
 # Choose a play with the highest score.
 def greedy_strat(valid_plays, board, rack, unseen):
-    if valid_plays:
-        valid_plays.sort()
-        valid_plays.reverse()
-        return PLAY, valid_plays[0]
-    else:
+    if not valid_plays:
         return EXCHANGE, None
+    valid_plays.sort()
+    valid_plays.reverse()
+    return PLAY, valid_plays[0]
 
 # Choose a play with the highest score, adjusted to subtract the value of the
 # tiles left in the rack.
-def leave_strat(valid_plays, board, rack, unseen):
-    if valid_plays:
-        best_score = -1000
-        best_play = None
-        # TODO: maybe only do this for the best-scoring plays, to speed up
-        for v in valid_plays:
-            leave = rack[:]
-            for l in v.p:
-                if l.islower():
-                    leave.remove('?')
-                else:
-                    leave.remove(l)
-            # Assume high-valued letters are harder to play.
-            # TODO: try to learn this with a function?
-            penalty = 0
-            for l in leave:
-                penalty += VALUES[l]
-            # multiplier tentatively chosen via some simulations vs. greedy_strat
-            mod_score = v.score - 2 * penalty
-            if mod_score > best_score:
-                best_score = mod_score
-                best_play = v
-        return PLAY, best_play
-    else:
-        return EXCHANGE, None   
+def leave_strat(valid_plays, board, rack, unseen, m=0.1):
+    if not valid_plays:
+        return EXCHANGE, None
+    best_score = -1000
+    best_play = None
+    valid_plays.sort()
+    valid_plays.reverse()
+    for v in valid_plays[0, min(len(valid_plays), 25)]:
+        leave = rack[:]
+        for l in v.p:
+            if l.islower():
+                leave.remove('?')
+            else:
+                leave.remove(l)
+        # Assume high-valued letters are harder to play.
+        # TODO: try to learn this with a function?
+        penalty = 0
+        for l in leave:
+            penalty += VALUES[l]
+        # multiplier tentatively chosen via some simulations vs. greedy_strat
+        mod_score = v.score - m * penalty
+        if mod_score > best_score:
+            best_score = mod_score
+            best_play = v
+    return PLAY, best_play  
 
-# TODO: write more strats (e.g., lookahead). Try to use CS238 material!
+# Assume greedy opponent, see what they do next turn.
+# TODO: aggh this is slow, mostly because of the blank
+def lookahead_1_strat(valid_plays, board, rack, unseen):
+    if not valid_plays:
+        return EXCHANGE, None
+    best_delta = -1000
+    best_play = None
+    valid_plays.sort()
+    valid_plays.reverse()
+    for v in valid_plays[0 : min(len(valid_plays), 10)]:
+        # TODO: this is code from sim(). Factor out to remove redundancy.
+        new_board = copy(board)
+        score, _, __, p, edits, ___ = v
+        for rr, cc, l in edits:
+            new_board[rr][cc] = l
+        avg_opp_score = 0
+        num_trials = 10
+        for _ in range(num_trials):
+            # Simulate a rack for the opponent.
+            opp_rack = random.sample(
+                unseen, max(0, min(len(unseen)-len(edits), RACK_SIZE)))
+            opp_valid_plays = find_valid_plays(new_board, opp_rack, False)
+            # Skip the last three inputs because greedy_strat doesn't use them.
+            choice, details = greedy_strat(opp_valid_plays, None, None, None)
+            if choice == PLAY:
+                avg_opp_score += details[0]
+        avg_opp_score /= num_trials
+        delta = score - avg_opp_score
+        if delta > best_delta:
+            best_delta = delta
+            best_play = v
+    return PLAY, best_play 
+    
+# TODO: write more strats (e.g., lookahead 2?). Try to use CS238 material!
 
 # ********** END STRATEGIES **********
 
@@ -259,7 +294,6 @@ def sim(strat1, strat2, log=False):
             valid_plays, board, racks[active], sorted(racks[1-active] + bag))
         if choice == PLAY:
             score, r, c, p, edits, scored_words = details
-            played_blank = False
             for rr, cc, l in edits:
                 board[rr][cc] = l
             old_rack = racks[active][:]
@@ -304,14 +338,14 @@ def sim(strat1, strat2, log=False):
                     scores[0], scores[1], p+1, rep_rack(racks[p]), penalty))
     return scores
 
-def compare_strats(strat1, strat2, num_trials):
+def compare_strats(strat1, strat2, num_trials, log_each_game=False):
     assert num_trials % 2 == 0, "Number of trials must be even"
     wins = [0, 0]
     score_totals = [0, 0]
     strats = [strat1, strat2]
     for i in range(num_trials):
         goes_first = i % 2
-        scores = sim(strats[goes_first], strats[1-goes_first])
+        scores = sim(strats[goes_first], strats[1-goes_first], log=log_each_game)
         if goes_first == 0:
             score1, score2 = scores
         else:
@@ -332,4 +366,4 @@ def compare_strats(strat1, strat2, num_trials):
     print("Average scores: Player 1 {}, Player 2 {}".format(
         score_totals[0] / num_trials, score_totals[1] / num_trials))
 
-compare_strats(leave_strat, greedy_strat, 200)
+compare_strats(lookahead_1_strat, greedy_strat, 200, log_each_game=False)
