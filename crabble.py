@@ -182,17 +182,20 @@ def rep_words(scored_words):
 # valid_plays: list of all valid plays, each as a ValidPlay tuple
 # board: the current board
 # rack: the active player's rack
-# bag: the remaining contents of the bag (sorted)
+# unseen: the remaining contents of the bag + opponent's rack (sorted)
 # TODO: will probably need more inputs like current scores
 # TODO: maybe better to pass around game state objects?
-# TODO: these should probably also be objects
-def random_strat(valid_plays, board, rack, bag):
+# TODO: these strategies themselves should probably also be objects
+
+# Choose a valid play uniformly at random.
+def random_strat(valid_plays, board, rack, unseen):
     if valid_plays:
         return PLAY, random.choice(valid_plays)
     else:
-        return PASS, None
+        return EXCHANGE, None
 
-def greedy_strat(valid_plays, board, rack, bag):
+# Choose a play with the highest score.
+def greedy_strat(valid_plays, board, rack, unseen):
     if valid_plays:
         valid_plays.sort()
         valid_plays.reverse()
@@ -200,7 +203,35 @@ def greedy_strat(valid_plays, board, rack, bag):
     else:
         return EXCHANGE, None
 
-# TODO: write more strats (e.g., lookahead)
+# Choose a play with the highest score, adjusted to subtract the value of the
+# tiles left in the rack.
+def leave_strat(valid_plays, board, rack, unseen):
+    if valid_plays:
+        best_score = -1000
+        best_play = None
+        # TODO: maybe only do this for the best-scoring plays, to speed up
+        for v in valid_plays:
+            leave = rack[:]
+            for l in v.p:
+                if l.islower():
+                    leave.remove('?')
+                else:
+                    leave.remove(l)
+            # Assume high-valued letters are harder to play.
+            # TODO: try to learn this with a function?
+            penalty = 0
+            for l in leave:
+                penalty += VALUES[l]
+            # multiplier tentatively chosen via some simulations vs. greedy_strat
+            mod_score = v.score - 2 * penalty
+            if mod_score > best_score:
+                best_score = mod_score
+                best_play = v
+        return PLAY, best_play
+    else:
+        return EXCHANGE, None   
+
+# TODO: write more strats (e.g., lookahead). Try to use CS238 material!
 
 # ********** END STRATEGIES **********
 
@@ -225,7 +256,7 @@ def sim(strat1, strat2, log=False):
         # TODO: handle exchanges as possible moves
         valid_plays = find_valid_plays(board, racks[active], first_play)
         choice, details = strats[active](
-            valid_plays, board, racks[active], sorted(bag))
+            valid_plays, board, racks[active], sorted(racks[1-active] + bag))
         if choice == PLAY:
             score, r, c, p, edits, scored_words = details
             played_blank = False
@@ -301,4 +332,4 @@ def compare_strats(strat1, strat2, num_trials):
     print("Average scores: Player 1 {}, Player 2 {}".format(
         score_totals[0] / num_trials, score_totals[1] / num_trials))
 
-compare_strats(random_strat, greedy_strat, 100)
+compare_strats(leave_strat, greedy_strat, 200)
