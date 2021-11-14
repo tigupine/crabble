@@ -28,11 +28,11 @@ VALUES = {'A': 1, 'B': 3, 'C': 3, 'D': 2, 'E': 1, 'F': 4,
 
 # 40 tiles
 # either do 3 As and one ?, or 4 As
-FREQS = {'A': 4, 'B': 1, 'C': 1, 'D': 1, 'E': 4, 'F': 1,
+FREQS = {'A': 3, 'B': 1, 'C': 1, 'D': 1, 'E': 4, 'F': 1,
          'G': 1, 'H': 1, 'I': 3, 'J': 1, 'K': 1, 'L': 1,
          'M': 1, 'N': 2, 'O': 3, 'P': 1, 'Q': 1, 'R': 2,
          'S': 2, 'T': 2, 'U': 1, 'V': 1, 'W': 1, 'X': 1,
-         'Y': 1, 'Z': 1, '?': 0}
+         'Y': 1, 'Z': 1, '?': 1}
 
 # Bonus for using entire rack
 BINGO_BONUS = 20
@@ -272,21 +272,22 @@ def lookahead_1_strat(valid_plays, board, rack, unseen):
     # Only look at the highest-scoring valid plays, to save time.
     for v in valid_plays[0 : min(len(valid_plays), 10)]:
         # TODO: this is code from sim(). Factor out to remove redundancy.
-        new_board = copy(board)
         score, _, __, edits, ___ = v
         for rr, cc, l in edits:
-            new_board[rr][cc] = l
+            board[rr][cc] = l
         avg_opp_score = 0
         num_trials = 10
         for _ in range(num_trials):
             # Simulate a rack for the opponent.
             opp_rack = random.sample(
                 unseen, max(0, min(len(unseen)-len(edits), RACK_SIZE)))
-            opp_valid_plays = find_valid_plays(new_board, opp_rack, False)
+            opp_valid_plays = find_valid_plays(board, opp_rack, False)
             # Skip the last three inputs because greedy_strat doesn't use them.
             choice, details = greedy_strat(opp_valid_plays, None, None, None)
             if choice == PLAY:
                 avg_opp_score += details[0]
+        for rr, cc, _ in edits:
+            board[rr][cc] = False
         avg_opp_score /= num_trials
         delta = score - avg_opp_score
         if delta > best_delta:
@@ -316,7 +317,6 @@ def sim(strat1, strat2, log=False):
         print("\nGAME START!\n")
     wordless_turns = 0
     while racks[0] and racks[1]:
-        # TODO: handle exchanges as possible moves
         valid_plays = find_valid_plays(board, racks[active], first_play)
         choice, details = strats[active](
             valid_plays, board, racks[active], sorted(racks[1-active] + bag))
@@ -394,4 +394,5 @@ def compare_strats(strat1, strat2, num_trials, log_each_game=False):
     print("Average scores: Player 1 {}, Player 2 {}".format(
         score_totals[0] / num_trials, score_totals[1] / num_trials))
 
-compare_strats(greedy_strat, leave_strat, 1000, log_each_game=False)
+# TODO: get a sense of the uncertainty in these estimates. Bootstrap?
+compare_strats(greedy_strat, lookahead_1_strat, 100, log_each_game=True)
