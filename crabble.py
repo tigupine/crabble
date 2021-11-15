@@ -4,7 +4,7 @@ import random
 from string import ascii_lowercase
 
 ValidPlay = namedtuple(
-    'ValidPlay', ['score', 'r', 'c', 'edits', 'scored_words'])
+    'ValidPlay', ['score', 'edits', 'scored_words'])
 
 RACK_SIZE = 5
 # 1 = double word, 2 = double letter, 3 = triple letter
@@ -49,8 +49,9 @@ PASS = 'PASS'
 
 # TODO: write tests for these functions
 
-def check_board(board, edit_positions, across, r, c):
+def check_board(board, edit_positions, across):
     checks = set()
+    r, c = edit_positions[0]
     if across:
         checks.add((r, True))
         for _, c in edit_positions:
@@ -170,12 +171,12 @@ def find_valid_plays(board, rack, first_play):
                             board[rrr][ccc] = ts[j]
                             edits.append((rrr, ccc, ts[j]))
                         score, scored_words = check_board(
-                            board, edit_positions, across, r, c)
+                            board, edit_positions, across)
                         # Since we only have 1 blank, it is impossible to score 0.
                         if score:
                             valid_plays.append(
                                 ValidPlay(
-                                    score, r, c, tuple(edits), scored_words))
+                                    score, tuple(edits), scored_words))
                         for rrr, ccc in edit_positions:
                             board[rrr][ccc] = False
                     
@@ -259,12 +260,6 @@ def leave_strat(valid_plays, board, rack, unseen, m=1):
             best_play = v
     return PLAY, best_play
 
-def endgame_strat(valid_plays, board, rack, unseen):
-    if len(unseen) <= 10:
-        return lookahead_1_strat(valid_plays, board, rack, unseen)
-    else:
-        return greedy_strat(valid_plays, board, rack, unseen)
-
 # Assume greedy opponent, see what they do next turn.
 # TODO: aggh this is slow, mostly because of the blank
 def lookahead_1_strat(valid_plays, board, rack, unseen):
@@ -277,7 +272,7 @@ def lookahead_1_strat(valid_plays, board, rack, unseen):
     # Only look at the highest-scoring valid plays, to save time.
     for v in valid_plays[0 : min(len(valid_plays), 10)]:
         # TODO: this is code from sim(). Factor out to remove redundancy.
-        score, _, __, edits, ___ = v
+        score, edits, ___ = v
         for rr, cc, l in edits:
             board[rr][cc] = l
         avg_opp_score = 0
@@ -298,7 +293,13 @@ def lookahead_1_strat(valid_plays, board, rack, unseen):
         if delta > best_delta:
             best_delta = delta
             best_play = v
-    return PLAY, best_play 
+    return PLAY, best_play
+
+def endgame_strat(valid_plays, board, rack, unseen):
+    if len(unseen) <= 10:
+        return lookahead_1_strat(valid_plays, board, rack, unseen)
+    else:
+        return greedy_strat(valid_plays, board, rack, unseen)
     
 # TODO: write more strats (e.g., lookahead 2?). Try to use CS238 material!
 
@@ -326,7 +327,7 @@ def sim(strat1, strat2, log=False):
         choice, details = strats[active](
             valid_plays, board, racks[active], sorted(racks[1-active] + bag))
         if choice == PLAY:
-            score, r, c, edits, scored_words = details
+            score,edits, scored_words = details
             for rr, cc, l in edits:
                 board[rr][cc] = l
             old_rack = racks[active][:]
@@ -337,7 +338,8 @@ def sim(strat1, strat2, log=False):
                     racks[active].remove(l)
             scores[active] += score
             scoreline = "rack {}, played r{}c{} {}  score {}".format(
-                rep_rack(old_rack), r+1, c+1, rep_words(scored_words), score)
+                rep_rack(old_rack), edits[0][0]+1, edits[0][1]+1,
+                rep_words(scored_words), score)
             draw(bag, racks[active])
             wordless_turns = 0
             first_play = False
@@ -415,5 +417,6 @@ def compare_strats_with_confidence(
     s1stdev = (sum([(x - s1mean)**2 for x in s1s]) / (num_experiments - 1))**0.5
     print(s1mean, s1stdev)
 
-compare_strats_with_confidence(leave_strat, greedy_strat, 20, 1000)
-
+#sim(endgame_strat, lookahead_1_strat, log=True)
+#compare_strats_with_confidence(leave_strat, greedy_strat, 20, 100)
+#compare_strats(endgame_strat, greedy_strat, 1000)
