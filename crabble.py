@@ -25,6 +25,8 @@ VALUES = {'A': 1, 'B': 3, 'C': 3, 'D': 2, 'E': 1, 'F': 4,
           'M': 3, 'N': 1, 'O': 1, 'P': 3, 'Q': 10, 'R': 1,
           'S': 1, 'T': 1, 'U': 1, 'V': 4, 'W': 4, 'X': 8,
           'Y': 4, 'Z': 10, '?': 0}
+def value(l):
+    return VALUES.get(l, 0)
 
 # 40 tiles
 # either do 3 As and one ?, or 4 As
@@ -48,8 +50,6 @@ PASS = 'PASS'
 # TODO: write tests for these functions
 
 def check_board(board, edit_positions, across, r, c):
-    def value(l):
-        return VALUES.get(l, 0)
     checks = set()
     if across:
         checks.add((r, True))
@@ -233,8 +233,13 @@ def greedy_strat(valid_plays, board, rack, unseen):
     valid_plays.reverse()
     return PLAY, valid_plays[0]
 
+def leave_strat_m(m):
+    return lambda valid_plays, board, rack, unseen : leave_strat(
+        valid_plays, board, rack, unseen, m=m)
+
 # Choose a play with the highest score, adjusted to subtract the value of the
-# tiles left in the rack.
+# tiles left in the rack. (i.e., assume high-valued letters are harder to play)
+# TODO: try to learn this with a function?
 def leave_strat(valid_plays, board, rack, unseen, m=1):
     if not valid_plays:
         return EXCHANGE, None
@@ -243,22 +248,22 @@ def leave_strat(valid_plays, board, rack, unseen, m=1):
     valid_plays.sort()
     valid_plays.reverse()
     for v in valid_plays:
-        leave = rack[:]
-        for _, _, l in v.edits:
-            if l.islower():
-                leave.remove('?')
-            else:
-                leave.remove(l)
-        # Assume high-valued letters are harder to play.
-        # TODO: try to learn this with a function?
         penalty = 0
-        for l in leave:
+        for l in rack:
             penalty += VALUES[l]
+        for _, _, l in v.edits:
+            penalty -= value(l)
         delta = v.score - m * penalty
         if delta > best_delta:
             best_delta = delta
             best_play = v
-    return PLAY, best_play  
+    return PLAY, best_play
+
+def endgame_strat(valid_plays, board, rack, unseen):
+    if len(unseen) <= 10:
+        return lookahead_1_strat(valid_plays, board, rack, unseen)
+    else:
+        return greedy_strat(valid_plays, board, rack, unseen)
 
 # Assume greedy opponent, see what they do next turn.
 # TODO: aggh this is slow, mostly because of the blank
@@ -366,7 +371,8 @@ def sim(strat1, strat2, log=False):
                     scores[0], scores[1], p+1, rep_rack(racks[p]), penalty))
     return scores
 
-def compare_strats(strat1, strat2, num_trials, log_each_game=False):
+def compare_strats(strat1, strat2, num_trials, log_each_game=False,
+                   progress_update_every = 1):
     assert num_trials % 2 == 0, "Number of trials must be even"
     wins = [0, 0]
     score_totals = [0, 0]
@@ -378,8 +384,9 @@ def compare_strats(strat1, strat2, num_trials, log_each_game=False):
             score1, score2 = scores
         else:
             score2, score1 = scores
-        print("Game {} ({} goes first): P1 {} P2 {}".format(
-            i+1, goes_first+1, score1, score2))
+        if i % progress_update_every == 0:
+            print("Game {} ({} goes first): P1 {} P2 {}".format(
+                i+1, goes_first+1, score1, score2))
         if score1 > score2:
             wins[0] += 1
         elif score2 > score1:
@@ -393,6 +400,20 @@ def compare_strats(strat1, strat2, num_trials, log_each_game=False):
     print("Player 1 won {}, Player 2 won {}".format(wins[0], wins[1]))
     print("Average scores: Player 1 {}, Player 2 {}".format(
         score_totals[0] / num_trials, score_totals[1] / num_trials))
+    return wins
 
-# TODO: get a sense of the uncertainty in these estimates. Bootstrap?
-compare_strats(greedy_strat, lookahead_1_strat, 100, log_each_game=True)
+def compare_strats_with_confidence(
+    strat1, strat2, num_experiments, num_trials_each):
+    s1s = []
+    for _ in range(num_experiments):
+        s1, _ = compare_strats(
+            leave_strat, greedy_strat, num_trials_each, log_each_game=False,
+            progress_update_every=100)
+        s1s.append(s1)
+
+    s1mean = sum(s1s) / num_experiments
+    s1stdev = (sum([(x - s1mean)**2 for x in s1s]) / (num_experiments - 1))**0.5
+    print(s1mean, s1stdev)
+
+compare_strats_with_confidence(leave_strat, greedy_strat, 20, 1000)
+
