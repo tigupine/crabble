@@ -234,19 +234,28 @@ def find_valid_plays(board, rack, first_play):
                     
     return valid_plays
 
+# Put the largest exchanges last so that strategies can use that.
+def find_exchanges(rack):
+    exch = []
+    for n in range(1, RACK_SIZE + 1):
+        seen = set()
+        for c in itertools.combinations(rack, n):
+            seen.add(tuple(sorted(c)))
+        exch.extend([''.join(s) for s in seen])
+    return exch
+
 def draw(bag, rack):
     while bag and len(rack) < RACK_SIZE:
         rack.append(bag.pop())
 
 def exchange(bag, rack, tiles):
+    assert len(bag) >= len(tiles)
     exchanged = []
     for l in tiles:
         exchanged.append(rack.pop(rack.index(l)))
     draw(bag, rack)
     bag += exchanged
     random.shuffle(bag)
-    # Draw up if that's still needed.
-    draw(bag, rack)
 
 def rep_board(board):
     return '\n'.join([''.join([c if c else '.' for c in l]) for l in board])
@@ -279,30 +288,40 @@ def remove_played_tiles(rack, edits):
 # TODO: these strategies themselves should probably also be objects
 
 # Choose a valid play uniformly at random.
-def random_strat(valid_plays, board, rack, unseen):
+def random_strat(valid_plays, valid_exchanges, board, rack, unseen,
+                 tiles_in_bag):
     if valid_plays:
         return PLAY, random.choice(valid_plays)
+    elif valid_exchanges:
+        return EXCHANGE, random.choice(valid_exchanges)
     else:
-        return EXCHANGE, None
+        return PASS, None
 
 # Choose a play with the highest score.
-def greedy_strat(valid_plays, board, rack, unseen):
-    if not valid_plays:
-        return EXCHANGE, None
-    valid_plays.sort()
-    valid_plays.reverse()
+def greedy_strat(valid_plays, valid_exchanges, board, rack, unseen,
+                 tiles_in_bag):
+    if valid_plays:
+        valid_plays.sort()
+        valid_plays.reverse()
+        return PLAY, valid_plays[0]
+    elif valid_exchanges:
+        return EXCHANGE, valid_exchanges[-1] # one of the biggest possible
+    else:
+        return PASS, None
+    
     return PLAY, valid_plays[0]
 
 def leave_strat_m(m):
-    return lambda valid_plays, board, rack, unseen : leave_strat(
-        valid_plays, board, rack, unseen, m=m)
+    return (lambda valid_plays, valid_exchanges, board, rack, unseen,
+            tiles_in_bag : leave_strat(
+                valid_plays, valid_exchanges, board, rack, unseen,
+                tiles_in_bag, m=m))
 
 # Adjust the score of each potential move based on data from two future moves.
-def leave_strat(valid_plays, board, rack, unseen, m=0.8):
-    if not valid_plays:
-        return EXCHANGE, None
+def leave_strat(valid_plays, valid_exchanges, board, rack, unseen,
+                tiles_in_bag, m=0.2):
     best_adj_score = -1000
-    best_play = None
+    best_choice = PASS, None
     for v in valid_plays:
         r_copy = rack[:]
         remove_played_tiles(r_copy, v.edits)
@@ -310,14 +329,28 @@ def leave_strat(valid_plays, board, rack, unseen, m=0.8):
         adj_score = v.score + m * LEAVES[''.join(r_copy)]
         if adj_score > best_adj_score:
             best_adj_score = adj_score
-            best_play = v
-    return PLAY, best_play
+            best_choice = PLAY, v
+    for ex in find_exchanges(rack):
+        if len(ex) > tiles_in_bag:
+            continue
+        if len(ex) == RACK_SIZE:
+            adj_score = m * AVERAGE_LEAVE_VALUE
+        else:
+            adj_score = m * LEAVES[ex]
+        if adj_score > best_adj_score:
+            best_adj_score = adj_score
+            best_choice = EXCHANGE, ex
+    return best_choice
 
 # Assume greedy opponent, see what they do next turn.
 # TODO: aggh this is slow, mostly because of the blank
-def lookahead_1_strat(valid_plays, board, rack, unseen):
+def lookahead_1_strat(valid_plays, valid_exchanges, board, rack, unseen,
+                      tiles_in_bag):
     if not valid_plays:
-        return EXCHANGE, None
+        if valid_exchanges:
+            return EXCHANGE, valid_exchanges[-1]
+        else:
+            return PASS, None
     best_delta = -1000
     best_play = None
     valid_plays.sort()
@@ -348,17 +381,21 @@ def lookahead_1_strat(valid_plays, board, rack, unseen):
             best_play = v
     return PLAY, best_play
 
-def endgame_strat(valid_plays, board, rack, unseen):
+def endgame_strat(valid_plays, board, rack, unseen, tiles_in_bag):
     if len(unseen) <= 10:
-        return lookahead_1_strat(valid_plays, board, rack, unseen)
+        return lookahead_1_strat(valid_plays, valid_exchanges, board, rack,
+                                 unseen, tiles_in_bag)
     else:
-        return greedy_strat(valid_plays, board, rack, unseen)
+        return greedy_strat(valid_plays, valid_exchanges, board, rack, unseen,
+                            tiles_in_bag)
     
 # TODO: write more strats (e.g., lookahead 2?). Try to use CS238 material!
 
 # ********** END STRATEGIES **********
 
 def sim(strat1, strat2, log=False):
+    strats = [strat1, strat2]
+    scores = [0, 0]  
     record = [[], []]
     board = [[False for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
     bag = []
@@ -369,18 +406,18 @@ def sim(strat1, strat2, log=False):
     racks = [[], []]
     draw(bag, racks[0])
     draw(bag, racks[1])
-    scores = [0, 0]
-    strats = [strat1, strat2]
     active = 0  # 0 on first player's turn, 1 on second player's turn
     first_play = True  # whether or not board is empty
     if log:
         print("\nGAME START!\n")
-    wordless_turns = 0
-    while racks[0] and racks[1]:
+    wordless_turns = 0 # the game ends automatically after 6 wordless turns
+    while racks[0] and racks[1]: # or when a rack is empty
         valid_plays = find_valid_plays(board, racks[active], first_play)
+        valid_exchanges = (
+            find_exchanges(racks[active]) if len(bag) >= RACK_SIZE else [])
         choice, details = strats[active](
-            valid_plays, board, racks[active],
-            sorted(racks[1-active] + bag))
+            valid_plays, valid_exchanges, board, racks[active],
+                sorted(racks[1-active] + bag), len(bag))
         if choice == PLAY:
             score, edits, scored_words = details
             for rr, cc, l in edits:
@@ -395,14 +432,13 @@ def sim(strat1, strat2, log=False):
             draw(bag, racks[active])
             wordless_turns = 0
             first_play = False
-        elif choice == EXCHANGE and bag:
+        elif choice == EXCHANGE:
             wordless_turns += 1
             if bag:
                 oldrack = racks[active][:]
-                # currently just exchange everything. TODO: exchange specifics
-                exchange(bag, racks[active], racks[active])
-                scoreline = "rack {}, redrew to {}".format(
-                    rep_rack(oldrack), rep_rack(racks[active]))
+                exchange(bag, racks[active], details)
+                scoreline = "rack {}, exchanged {}, redrew to {}".format(
+                    rep_rack(oldrack), details, rep_rack(racks[active]))
                 record[active].append(
                     (EXCHANGE, 0, rep_rack(racks[active])))
         else: # PASS
@@ -429,12 +465,12 @@ def sim(strat1, strat2, log=False):
     return scores, record
 
 def compare_strats(strat1, strat2, num_trials, log_each_game=False,
-                   progress_update_every = 1):
+                   progress_update_every = 100):
     assert num_trials % 2 == 0, "Number of trials must be even"
     wins = [0, 0]
     score_totals = [0, 0]
     strats = [strat1, strat2]
-    for i in range(num_trials):
+    for i in range(1, num_trials+1):
         goes_first = i % 2
         scores, _ = sim(strats[goes_first], strats[1-goes_first], log=log_each_game)
         if goes_first == 0:
@@ -462,7 +498,8 @@ def compare_strats(strat1, strat2, num_trials, log_each_game=False,
 def compare_strats_with_confidence(
     strat1, strat2, num_experiments, num_trials_each):
     s1s = []
-    for _ in range(num_experiments):
+    for i in range(num_experiments):
+        print("Experiment {} of {}".format(i + 1, num_experiments))
         s1, _ = compare_strats(
             leave_strat, greedy_strat, num_trials_each, log_each_game=False,
             progress_update_every=100)
@@ -470,7 +507,8 @@ def compare_strats_with_confidence(
 
     s1mean = sum(s1s) / num_experiments
     s1stdev = (sum([(x - s1mean)**2 for x in s1s]) / (num_experiments - 1))**0.5
-    print(s1mean, s1stdev)
+    print("Strat 1 mean wins: {} stdev: {}".format(
+        round(s1mean, 2), round(s1stdev, 2)))
 
 def compile_leave_data(num_trials, min_instances=10, log_every=100):
     per_leave_data = {}
@@ -500,6 +538,9 @@ def compile_leave_data(num_trials, min_instances=10, log_every=100):
             f.write("{},{}\n".format(k, round(v[0]/v[1], 1)))
 
 #compile_leave_data(100000)
-#sim(endgame_strat, lookahead_1_strat, log=True)
+#sim(leave_strat, leave_strat, log=True)
 #compare_strats_with_confidence(leave_strat, greedy_strat, 20, 1000)
-#compare_strats(endgame_strat, greedy_strat, 1000)
+for i in range(1, 20):
+    print(i*0.1)
+    compare_strats(leave_strat_m(i*0.1), greedy_strat, 1000,
+                   progress_update_every=10000)
