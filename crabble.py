@@ -330,9 +330,7 @@ def leave_strat(valid_plays, valid_exchanges, board, rack, unseen,
         if adj_score > best_adj_score:
             best_adj_score = adj_score
             best_choice = PLAY, v
-    for ex in find_exchanges(rack):
-        if len(ex) > tiles_in_bag:
-            continue
+    for ex in valid_exchanges:
         if len(ex) == RACK_SIZE:
             adj_score = m * AVERAGE_LEAVE_VALUE
         else:
@@ -381,7 +379,8 @@ def lookahead_1_strat(valid_plays, valid_exchanges, board, rack, unseen,
             best_play = v
     return PLAY, best_play
 
-def endgame_strat(valid_plays, board, rack, unseen, tiles_in_bag):
+def endgame_strat(valid_plays, valid_exchanges, board, rack, unseen,
+                  tiles_in_bag):
     if len(unseen) <= 10:
         return lookahead_1_strat(valid_plays, valid_exchanges, board, rack,
                                  unseen, tiles_in_bag)
@@ -470,7 +469,7 @@ def compare_strats(strat1, strat2, num_trials, log_each_game=False,
     wins = [0, 0]
     score_totals = [0, 0]
     strats = [strat1, strat2]
-    for i in range(1, num_trials+1):
+    for i in range(num_trials):
         goes_first = i % 2
         scores, _ = sim(strats[goes_first], strats[1-goes_first], log=log_each_game)
         if goes_first == 0:
@@ -540,7 +539,9 @@ def compile_leave_data(num_trials, min_instances=10, log_every=100):
 #compile_leave_data(100000)
 #sim(leave_strat, leave_strat, log=True)
 #compare_strats_with_confidence(leave_strat, greedy_strat, 20, 1000)
-for i in range(1, 20):
+"""
+for i in range(1, 15):
     print(i*0.1)
-    compare_strats(leave_strat_m(i*0.1), greedy_strat, 1000,
+    compare_strats(leave_strat_m(i*0.1), greedy_strat, 2000,
                    progress_update_every=10000)
+"""
