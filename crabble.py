@@ -429,13 +429,16 @@ def compile_leave_data(num_trials, min_instances=10, log_every=100):
             print(t)
         _, record = sim(greedy_strat, greedy_strat, log=False)
         for i in range(2):
-            for j in range(1, len(record[i])-2):
+            for j in range(len(record[i])-2):
                 _, _, rack = record[i][j]
                 if len(rack) == RACK_SIZE:
                     continue
-                _, next_score, _ = record[i][j+1]
-                _, next_score_2, _ = record[i][j+2]
-                score = next_score + next_score_2
+                move_1, score_1, _ = record[i][j+1]
+                move_2, score_2, _ = record[i][j+2]
+                # Don't bias too heavily toward the endgame.
+                if move_1 != PLAY and move_2 != PLAY:
+                    continue
+                score = score_1 + score_2
                 if rack not in per_leave_data:
                     per_leave_data[rack] = [0, 0]
                 per_leave_data[rack][0] += score
@@ -443,10 +446,10 @@ def compile_leave_data(num_trials, min_instances=10, log_every=100):
     f = open("leaves.txt", "w")
     for k, v in sorted(per_leave_data.items()):
         total, instances = v
-        if total >= min_instances:
+        if instances >= min_instances:
             f.write("{} {}\n".format(k, round(v[0]/v[1], 1)))
 
-#compile_leave_data(2000000)
+#compile_leave_data(100000)
 #sim(endgame_strat, lookahead_1_strat, log=True)
 #compare_strats_with_confidence(leave_strat, greedy_strat, 20, 100)
 #compare_strats(endgame_strat, greedy_strat, 1000)
