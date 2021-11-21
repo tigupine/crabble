@@ -1,7 +1,7 @@
 from collections import namedtuple
 import itertools
 import random
-from string import ascii_lowercase
+from string import ascii_lowercase, ascii_uppercase
 
 ValidPlay = namedtuple(
     'ValidPlay', ['score', 'edits', 'scored_words'])
@@ -41,6 +41,58 @@ BINGO_BONUS = 20
 
 f = open("words.txt", "r")
 WORDS = set([l.strip() for l in f.readlines() if len(l) <= BOARD_SIZE + 1])
+
+LEAVES = {}
+f = open("adjusted_leaves.txt", "r")
+values_total = 0
+for l in f.readlines():
+    leave, v = l.strip().split(',')
+    vv = float(v)
+    values_total += vv
+    LEAVES[leave] = float(vv)
+AVERAGE_LEAVE_VALUE = round(values_total / len(LEAVES), 1)
+
+"""
+# Fill in missing leave values.
+# TODO move this elsewhere as its own function
+
+def nearby_racks(r):
+    nearby = []
+    for index in range(len(r)):
+        for letter in ascii_uppercase:
+            new_r = ''.join(sorted(r[0:index] + letter + r[index+1:]))
+            if new_r in LEAVES:
+                nearby.append(new_r)
+    return nearby
+
+def possible_rack(rack):
+    letters = set([l for l in rack])
+    for l in letters:
+        if rack.count(l) > FREQS[l]:
+            return False
+    return True
+
+# Estimate values
+estimates = []
+for n in range(1, RACK_SIZE):
+    for r in itertools.product(ascii_uppercase, repeat=n):
+        rack = ''.join(sorted(r))
+        if not possible_rack(rack):
+            continue
+        if rack not in LEAVES:
+            nb = nearby_racks(rack)
+            if not nb:
+                estimates.append((rack, AVERAGE_LEAVE_VALUE))
+            else:
+                estimates.append(
+                    (rack, round(sum([LEAVES[rr] for rr in nb]) / len(nb), 1)))
+for r, v in estimates:
+    LEAVES[r] = v
+
+f = open("adjusted_leaves.txt", "w")
+for r, v in LEAVES.items():
+    f.write("{},{}\n".format(r, v))
+"""
 
 # Options for strategies to return.
 PLAY = 'PLAY'
@@ -208,6 +260,13 @@ def rep_words(scored_words):
 def copy(board):
     return [row[:] for row in board]
 
+def remove_played_tiles(rack, edits):
+    for _, _, l in edits:
+        if l.islower():
+            rack.remove('?')
+        else:
+            rack.remove(l)
+
 # ********** BEGIN STRATEGIES **********
 
 # A strategy takes the following inputs:
@@ -238,25 +297,19 @@ def leave_strat_m(m):
     return lambda valid_plays, board, rack, unseen : leave_strat(
         valid_plays, board, rack, unseen, m=m)
 
-# Choose a play with the highest score, adjusted to subtract the value of the
-# tiles left in the rack. (i.e., assume high-valued letters are harder to play)
-# TODO: try to learn this with a function?
-def leave_strat(valid_plays, board, rack, unseen, m=1):
+# Adjust the score of each potential move based on data from two future moves.
+def leave_strat(valid_plays, board, rack, unseen, m=0.8):
     if not valid_plays:
         return EXCHANGE, None
-    best_delta = -1000
+    best_adj_score = -1000
     best_play = None
-    valid_plays.sort()
-    valid_plays.reverse()
     for v in valid_plays:
-        penalty = 0
-        for l in rack:
-            penalty += VALUES[l]
-        for _, _, l in v.edits:
-            penalty -= value(l)
-        delta = v.score - m * penalty
-        if delta > best_delta:
-            best_delta = delta
+        r_copy = rack[:]
+        remove_played_tiles(r_copy, v.edits)
+        r_copy.sort()
+        adj_score = v.score + m * LEAVES[''.join(r_copy)]
+        if adj_score > best_adj_score:
+            best_adj_score = adj_score
             best_play = v
     return PLAY, best_play
 
@@ -326,17 +379,14 @@ def sim(strat1, strat2, log=False):
     while racks[0] and racks[1]:
         valid_plays = find_valid_plays(board, racks[active], first_play)
         choice, details = strats[active](
-            valid_plays, board, racks[active], sorted(racks[1-active] + bag))
+            valid_plays, board, racks[active],
+            sorted(racks[1-active] + bag))
         if choice == PLAY:
-            score,edits, scored_words = details
+            score, edits, scored_words = details
             for rr, cc, l in edits:
                 board[rr][cc] = l
             old_rack = racks[active][:]
-            for _, _, l in edits:
-                if l.islower():
-                    racks[active].remove('?')
-                else:
-                    racks[active].remove(l)
+            remove_played_tiles(racks[active], edits)
             scores[active] += score
             scoreline = "rack {}, played r{}c{} {}  score {}".format(
                 rep_rack(old_rack), edits[0][0]+1, edits[0][1]+1,
@@ -447,9 +497,9 @@ def compile_leave_data(num_trials, min_instances=10, log_every=100):
     for k, v in sorted(per_leave_data.items()):
         total, instances = v
         if instances >= min_instances:
-            f.write("{} {}\n".format(k, round(v[0]/v[1], 1)))
+            f.write("{},{}\n".format(k, round(v[0]/v[1], 1)))
 
 #compile_leave_data(100000)
 #sim(endgame_strat, lookahead_1_strat, log=True)
-#compare_strats_with_confidence(leave_strat, greedy_strat, 20, 100)
+#compare_strats_with_confidence(leave_strat, greedy_strat, 20, 1000)
 #compare_strats(endgame_strat, greedy_strat, 1000)
