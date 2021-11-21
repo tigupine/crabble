@@ -30,11 +30,11 @@ def value(l):
 
 # 40 tiles
 # either do 3 As and one ?, or 4 As
-FREQS = {'A': 3, 'B': 1, 'C': 1, 'D': 1, 'E': 4, 'F': 1,
+FREQS = {'A': 4, 'B': 1, 'C': 1, 'D': 1, 'E': 4, 'F': 1,
          'G': 1, 'H': 1, 'I': 3, 'J': 1, 'K': 1, 'L': 1,
          'M': 1, 'N': 2, 'O': 3, 'P': 1, 'Q': 1, 'R': 2,
          'S': 2, 'T': 2, 'U': 1, 'V': 1, 'W': 1, 'X': 1,
-         'Y': 1, 'Z': 1, '?': 1}
+         'Y': 1, 'Z': 1, '?': 0}
 
 # Bonus for using entire rack
 BINGO_BONUS = 20
@@ -200,10 +200,10 @@ def rep_board(board):
     return '\n'.join([''.join([c if c else '.' for c in l]) for l in board])
 
 def rep_rack(rack):
-    return ''.join(rack)
+    return ''.join(sorted(rack))
 
 def rep_words(scored_words):
-    return ','.join(scored_words)
+    return ','.join(sorted(scored_words))
 
 def copy(board):
     return [row[:] for row in board]
@@ -306,6 +306,7 @@ def endgame_strat(valid_plays, board, rack, unseen):
 # ********** END STRATEGIES **********
 
 def sim(strat1, strat2, log=False):
+    record = [[], []]
     board = [[False for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
     bag = []
     for l, f in FREQS.items():
@@ -340,6 +341,7 @@ def sim(strat1, strat2, log=False):
             scoreline = "rack {}, played r{}c{} {}  score {}".format(
                 rep_rack(old_rack), edits[0][0]+1, edits[0][1]+1,
                 rep_words(scored_words), score)
+            record[active].append((PLAY, score, rep_rack(racks[active])))
             draw(bag, racks[active])
             wordless_turns = 0
             first_play = False
@@ -351,9 +353,12 @@ def sim(strat1, strat2, log=False):
                 exchange(bag, racks[active], racks[active])
                 scoreline = "rack {}, redrew to {}".format(
                     rep_rack(oldrack), rep_rack(racks[active]))
+                record[active].append(
+                    (EXCHANGE, 0, rep_rack(racks[active])))
         else: # PASS
             wordless_turns += 1
             scoreline = "rack {}, passed".format(rep_rack(racks[active]))
+            record[active].append((PASS, 0, rep_rack(racks[active])))
         if log:
             print("{}-{}   P{} {}".format(
                 scores[0], scores[1], active+1, scoreline))
@@ -371,7 +376,7 @@ def sim(strat1, strat2, log=False):
             if log:
                 print("{}-{}   P{} left {} penalty -{}".format(
                     scores[0], scores[1], p+1, rep_rack(racks[p]), penalty))
-    return scores
+    return scores, record
 
 def compare_strats(strat1, strat2, num_trials, log_each_game=False,
                    progress_update_every = 1):
@@ -381,7 +386,7 @@ def compare_strats(strat1, strat2, num_trials, log_each_game=False,
     strats = [strat1, strat2]
     for i in range(num_trials):
         goes_first = i % 2
-        scores = sim(strats[goes_first], strats[1-goes_first], log=log_each_game)
+        scores, _ = sim(strats[goes_first], strats[1-goes_first], log=log_each_game)
         if goes_first == 0:
             score1, score2 = scores
         else:
@@ -417,6 +422,31 @@ def compare_strats_with_confidence(
     s1stdev = (sum([(x - s1mean)**2 for x in s1s]) / (num_experiments - 1))**0.5
     print(s1mean, s1stdev)
 
+def compile_leave_data(num_trials, min_instances=10, log_every=100):
+    per_leave_data = {}
+    for t in range(num_trials):
+        if t % log_every == 0:
+            print(t)
+        _, record = sim(greedy_strat, greedy_strat, log=False)
+        for i in range(2):
+            for j in range(1, len(record[i])-2):
+                _, _, rack = record[i][j]
+                if len(rack) == RACK_SIZE:
+                    continue
+                _, next_score, _ = record[i][j+1]
+                _, next_score_2, _ = record[i][j+2]
+                score = next_score + next_score_2
+                if rack not in per_leave_data:
+                    per_leave_data[rack] = [0, 0]
+                per_leave_data[rack][0] += score
+                per_leave_data[rack][1] += 1
+    f = open("leaves.txt", "w")
+    for k, v in sorted(per_leave_data.items()):
+        total, instances = v
+        if total >= min_instances:
+            f.write("{} {}\n".format(k, round(v[0]/v[1], 1)))
+
+#compile_leave_data(2000000)
 #sim(endgame_strat, lookahead_1_strat, log=True)
 #compare_strats_with_confidence(leave_strat, greedy_strat, 20, 100)
 #compare_strats(endgame_strat, greedy_strat, 1000)
