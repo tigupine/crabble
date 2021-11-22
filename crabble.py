@@ -1,7 +1,7 @@
 from collections import namedtuple
 import itertools
 import random
-from string import ascii_lowercase, ascii_uppercase
+from string import ascii_uppercase
 
 ValidPlay = namedtuple(
     'ValidPlay', ['score', 'edits', 'scored_words'])
@@ -24,17 +24,16 @@ VALUES = {'A': 1, 'B': 3, 'C': 3, 'D': 2, 'E': 1, 'F': 4,
           'G': 2, 'H': 4, 'I': 1, 'J': 8, 'K': 5, 'L': 1,
           'M': 3, 'N': 1, 'O': 1, 'P': 3, 'Q': 10, 'R': 1,
           'S': 1, 'T': 1, 'U': 1, 'V': 4, 'W': 4, 'X': 8,
-          'Y': 4, 'Z': 10, '?': 0}
+          'Y': 4, 'Z': 10}
 def value(l):
     return VALUES.get(l, 0)
 
 # 40 tiles
-# either do 3 As and one ?, or 4 As
 FREQS = {'A': 4, 'B': 1, 'C': 1, 'D': 1, 'E': 4, 'F': 1,
          'G': 1, 'H': 1, 'I': 3, 'J': 1, 'K': 1, 'L': 1,
          'M': 1, 'N': 2, 'O': 3, 'P': 1, 'Q': 1, 'R': 2,
          'S': 2, 'T': 2, 'U': 1, 'V': 1, 'W': 1, 'X': 1,
-         'Y': 1, 'Z': 1, '?': 0}
+         'Y': 1, 'Z': 1}
 
 # Bonus for using entire rack
 BINGO_BONUS = 20
@@ -136,7 +135,7 @@ def check_board(board, edit_positions, across):
                     score += value(l)
             elif w:  # reached the end of a word, process it
                 if len(w) >= 2:
-                    if w.upper() not in WORDS:
+                    if w not in WORDS:
                         return False, None
                     if has_new:
                         total_score += score * multiplier
@@ -185,13 +184,7 @@ def find_valid_plays(board, rack, first_play):
     for num_tiles in range(1, rack_len + 1):
         for com in itertools.combinations(rack, num_tiles):
             for perm in itertools.permutations(com):
-                if '?' in perm:
-                    blank_index = perm.index('?')
-                    for l in ascii_lowercase:
-                        tile_sets[num_tiles-1].add(
-                            perm[0:blank_index] + (l,) + perm[blank_index+1:])
-                else:
-                    tile_sets[num_tiles-1].add(perm)
+                tile_sets[num_tiles-1].add(perm)
     neighbors = neighboring_cells(board)
     for r in range(BOARD_SIZE):
         for c in range(BOARD_SIZE):
@@ -224,7 +217,6 @@ def find_valid_plays(board, rack, first_play):
                             edits.append((rrr, ccc, ts[j]))
                         score, scored_words = check_board(
                             board, edit_positions, across)
-                        # Since we only have 1 blank, it is impossible to score 0.
                         if score:
                             valid_plays.append(
                                 ValidPlay(
@@ -271,10 +263,7 @@ def copy(board):
 
 def remove_played_tiles(rack, edits):
     for _, _, l in edits:
-        if l.islower():
-            rack.remove('?')
-        else:
-            rack.remove(l)
+        rack.remove(l)
 
 # ********** BEGIN STRATEGIES **********
 
@@ -341,9 +330,8 @@ def leave_strat(valid_plays, valid_exchanges, board, rack, unseen,
     return best_choice
 
 # Assume greedy opponent, see what they do next turn.
-# TODO: aggh this is slow, mostly because of the blank
 def lookahead_1_strat(valid_plays, valid_exchanges, board, rack, unseen,
-                      tiles_in_bag):
+                      tiles_in_bag, num_trials=10, num_candidates=10):
     if not valid_plays:
         if valid_exchanges:
             return EXCHANGE, valid_exchanges[-1]
@@ -354,29 +342,33 @@ def lookahead_1_strat(valid_plays, valid_exchanges, board, rack, unseen,
     valid_plays.sort()
     valid_plays.reverse()
     # Only look at the highest-scoring valid plays, to save time.
-    for v in valid_plays[0 : min(len(valid_plays), 10)]:
-        # TODO: this is code from sim(). Factor out to remove redundancy.
-        score, edits, ___ = v
-        for rr, cc, l in edits:
-            board[rr][cc] = l
-        avg_opp_score = 0
-        num_trials = 10
-        for _ in range(num_trials):
-            # Simulate a rack for the opponent.
-            opp_rack = random.sample(
-                unseen, max(0, min(len(unseen)-len(edits), RACK_SIZE)))
+    # Use the same set of "next tiles" for each play, to compare on equal terms.
+    opp_scores = [0]*num_candidates
+    for _ in range(num_trials):
+        next_tiles = random.sample(unseen, min(len(unseen), 10))
+        for i in range(min(len(valid_plays), num_candidates)):
+            edits = valid_plays[i].edits
+            for rr, cc, l in edits:
+                board[rr][cc] = l
+            opp_rack = next_tiles[
+                len(edits) : min(len(edits) + RACK_SIZE, len(next_tiles)-1)]
+            opp_valid_exchanges = (
+                find_exchanges(opp_rack)
+                if tiles_in_bag - len(edits) - len(opp_rack) >= RACK_SIZE
+                else [])
             opp_valid_plays = find_valid_plays(board, opp_rack, False)
-            # Skip the last three inputs because greedy_strat doesn't use them.
-            choice, details = greedy_strat(opp_valid_plays, None, None, None)
+            # Skip the last four inputs because greedy_strat doesn't use them.
+            choice, details = greedy_strat(opp_valid_plays, opp_valid_exchanges,
+                                           None, None, None, None)
             if choice == PLAY:
-                avg_opp_score += details[0]
-        for rr, cc, _ in edits:
-            board[rr][cc] = False
-        avg_opp_score /= num_trials
-        delta = score - avg_opp_score
+                opp_scores[i] += details[0]
+            for rr, cc, _ in edits:
+                board[rr][cc] = False
+    for i in range(min(len(valid_plays), num_candidates)):
+        delta = valid_plays[i].score - (opp_scores[i] / num_trials)
         if delta > best_delta:
             best_delta = delta
-            best_play = v
+            best_play = valid_plays[i]
     return PLAY, best_play
 
 def endgame_strat(valid_plays, valid_exchanges, board, rack, unseen,
@@ -494,6 +486,8 @@ def compare_strats(strat1, strat2, num_trials, log_each_game=False,
         score_totals[0] / num_trials, score_totals[1] / num_trials))
     return wins
 
+# TODO: replace this with a binomial-based frequentist probability measure?
+# This is more complicated than it needs to be.
 def compare_strats_with_confidence(
     strat1, strat2, num_experiments, num_trials_each):
     s1s = []
@@ -534,14 +528,14 @@ def compile_leave_data(num_trials, min_instances=10, log_every=100):
     for k, v in sorted(per_leave_data.items()):
         total, instances = v
         if instances >= min_instances:
-            f.write("{},{}\n".format(k, round(v[0]/v[1], 1)))
+            f.write("{},{}\n".format(k, v))
 
 #compile_leave_data(100000)
-#sim(leave_strat, leave_strat, log=True)
-#compare_strats_with_confidence(leave_strat, greedy_strat, 20, 1000)
+#sim(lookahead_1_strat, greedy_strat, log=True)
+compare_strats_with_confidence(lookahead_1_strat, greedy_strat, 20, 1000)
 """
-for i in range(1, 15):
-    print(i*0.1)
-    compare_strats(leave_strat_m(i*0.1), greedy_strat, 2000,
-                   progress_update_every=10000)
+for i in range(1, 10):
+    print(i*0.025)
+    compare_strats(leave_strat_m(i*0.1), greedy_strat, 5000,
+                   progress_update_every=100000)
 """
