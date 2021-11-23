@@ -159,11 +159,11 @@ def test_check_board():
 # Determine where tiles would be played, starting from the given coordinates
 # and moving in the given direction. Return info on where each tile would fall
 # and at what point the play is connected with the rest of the board.
-def check_lane(board, neighbors, r, c, d, max_tiles):
+def check_lane(board, neighbors, r, c, across, max_tiles):
     placement_info = []
     connected = False
     rr, cc = r, c
-    dr, dc = d
+    dr, dc = (0 if across else 1, 1 if across else 0)
     results = []
     # See how many tiles need to be played for connectedness.
     for i in range(max_tiles):
@@ -179,7 +179,28 @@ def check_lane(board, neighbors, r, c, d, max_tiles):
     return placement_info
 
 def test_check_lane():
-    return # TODO write this!
+    ___ = False # just to make boards easier to parse visually
+    b = [[___, ___, ___, ___, ___, ___, ___, ___, ___],
+         [___, ___, ___, ___, ___, ___, ___, ___, ___],
+         [___, ___, ___, ___, ___, 'A', ___, ___, ___],
+         [___, 'A', ___, 'A', ___, 'A', ___, 'A', ___],
+         [___, 'A', 'A', 'A', 'A', 'A', 'A', 'A', ___],
+         [___, ___, ___, ___, 'A', ___, ___, ___, ___],
+         [___, ___, ___, 'A', 'A', ___, ___, ___, ___],
+         [___, ___, ___, ___, ___, ___, ___, ___, ___],
+         [___, ___, ___, ___, ___, ___, ___, ___, ___]]
+    n = neighboring_cells(b)
+    assert check_lane(b, n, 1, 2, True, 5) == [
+        (1, 2, False), (1, 3, False), (1, 4, False), (1, 5, True), (1, 6, True)]
+    assert check_lane(b, n, 3, 0, True, 5) == [
+        (3, 0, True), (3, 2, True), (3, 4, True), (3, 6, True), (3, 8, True)]
+    assert check_lane(b, n, 5, 8, False, 5) == [
+        (5, 8, False), (6, 8, False), (7, 8, False), (8, 8, False)] # early stop
+    assert check_lane(b, n, 2, 3, False, 5) == [
+        (2, 3, True), (5, 3, True), (7, 3, True), (8, 3, True)]
+    assert check_lane(b, n, 5, 3, True, 1) == [(5, 3, True)]
+    assert check_lane(b, n, 0, 0, False, 3) == [
+        (0, 0, False), (1, 0, False), (2, 0, False)]
 
 # Find and return coordinates of all cells next to a played tile.
 def neighboring_cells(board):
@@ -259,8 +280,9 @@ def find_valid_plays(board, rack, first_play):
             # small optimization, could probably remove
             if first_play and not (r == BOARD_SIZE // 2 or c == BOARD_SIZE // 2):
                 continue
-            for d in ((0, 1), (1, 0)):
-                placement_info = check_lane(board, neighbors, r, c, d, rack_len)
+            for across in (True, False):
+                placement_info = check_lane(board, neighbors, r, c, across,
+                                            rack_len)
                 if first_play:
                     used_center_square = False
                     for rr, cc, _ in placement_info:
@@ -269,7 +291,6 @@ def find_valid_plays(board, rack, first_play):
                     if not used_center_square:
                         continue
                 edit_positions = []
-                across = d[0] == 0
                 for i in range(len(placement_info)):
                     rr, cc, connected = placement_info[i]
                     edit_positions.append((rr, cc))
@@ -630,9 +651,9 @@ if RUN_TESTS:
     test_find_valid_plays()
     test_find_exchanges()
 
-#compile_leave_data(250000)
-sim(lookahead_1_strat, greedy_strat, log=True)
-compare_strats_with_confidence(leave_strat, greedy_strat, 20, 100)
+compile_leave_data(100000)
+#sim(lookahead_1_strat, greedy_strat, log=True)
+#compare_strats_with_confidence(leave_strat, greedy_strat, 20, 100)
 """
 for i in range(1, 10):
     print(i*0.025)
