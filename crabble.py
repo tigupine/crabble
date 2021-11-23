@@ -309,7 +309,19 @@ def find_exchanges(rack):
     return exch
 
 def test_find_exchanges():
-    return # TODO write this!
+    r = []
+    assert find_exchanges(r) == []
+    r = ['A']
+    assert find_exchanges(r) == ['A']
+    r = ['A', 'A', 'B']
+    e = find_exchanges(r)
+    assert len(e) == 5
+    for ex in ['A', 'B', 'AA', 'AB', 'AAB']:
+        assert ex in e
+    r = ['A', 'B', 'C', 'D', 'E']
+    e = find_exchanges(r)
+    assert e[-1] == 'ABCDE'
+    assert len(e) == 31
 
 def draw(bag, rack):
     while bag and len(rack) < RACK_SIZE:
