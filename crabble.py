@@ -3,6 +3,8 @@ import itertools
 import random
 from string import ascii_uppercase
 
+RUN_TESTS = True
+
 RACK_SIZE = 5
 # The layout of "premium" tiles on the board.
 # 1 = double word, 2 = double letter, 3 = triple letter
@@ -105,8 +107,6 @@ for r, v in LEAVES.items():
     f.write("{},{}\n".format(r, v))
 """
 
-# TODO: write tests for these functions
-
 # Determine whether the indicated play forms only valid words, and return
 # the score and the words if so.
 def check_board(board, edit_positions, across):
@@ -155,6 +155,9 @@ def check_board(board, edit_positions, across):
         total_score += BINGO_BONUS
     return total_score, tuple(scored_words)
 
+def test_check_board():
+    return # TODO write this!
+
 # Determine where tiles would be played, starting from the given coordinates
 # and moving in the given direction. Return info on where each tile would fall
 # and at what point the play is connected with the rest of the board.
@@ -177,6 +180,9 @@ def check_lane(board, neighbors, r, c, d, max_tiles):
         rr, cc = rr + dr, cc + dc
     return placement_info
 
+def test_check_lane():
+    return # TODO write this!
+
 # Find and return coordinates of all cells next to a played tile.
 def neighboring_cells(board):
     neighbors = [[False for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
@@ -189,6 +195,54 @@ def neighboring_cells(board):
                         and not board[rr][cc]):
                         neighbors[rr][cc] = True
     return neighbors
+
+def test_neighboring_cells():
+    ___ = False # just to make boards easier to parse visually
+    TTT = True
+    b = empty_board()
+    assert neighboring_cells(b) == b
+    b[4][4] = 'A'
+    assert neighboring_cells(b) == [
+        [___, ___, ___, ___, ___, ___, ___, ___, ___],
+        [___, ___, ___, ___, ___, ___, ___, ___, ___],
+        [___, ___, ___, ___, ___, ___, ___, ___, ___],
+        [___, ___, ___, ___, TTT, ___, ___, ___, ___],
+        [___, ___, ___, TTT, ___, TTT, ___, ___, ___],
+        [___, ___, ___, ___, TTT, ___, ___, ___, ___],
+        [___, ___, ___, ___, ___, ___, ___, ___, ___],
+        [___, ___, ___, ___, ___, ___, ___, ___, ___],
+        [___, ___, ___, ___, ___, ___, ___, ___, ___]]
+    b[3][4], b[4][3], b[4][5], b[5][4] = 'A', 'A', 'A', 'A'
+    assert neighboring_cells(b) == [
+        [___, ___, ___, ___, ___, ___, ___, ___, ___],
+        [___, ___, ___, ___, ___, ___, ___, ___, ___],
+        [___, ___, ___, ___, TTT, ___, ___, ___, ___],
+        [___, ___, ___, TTT, ___, TTT, ___, ___, ___],
+        [___, ___, TTT, ___, ___, ___, TTT, ___, ___],
+        [___, ___, ___, TTT, ___, TTT, ___, ___, ___],
+        [___, ___, ___, ___, TTT, ___, ___, ___, ___],
+        [___, ___, ___, ___, ___, ___, ___, ___, ___],
+        [___, ___, ___, ___, ___, ___, ___, ___, ___]]
+    b = [
+        [___, ___, ___, ___, 'A', 'A', 'A', 'A', 'A'],
+        [___, 'A', 'A', 'A', 'A', ___, ___, ___, 'A'],
+        [___, 'A', ___, ___, 'A', ___, ___, ___, ___],
+        [___, 'A', ___, ___, 'A', 'A', ___, ___, ___],
+        [___, 'A', 'A', 'A', 'A', 'A', 'A', 'A', ___],
+        [___, ___, 'A', ___, ___, ___, 'A', ___, ___],
+        [___, ___, 'A', ___, ___, ___, 'A', 'A', 'A'],
+        ['A', 'A', 'A', ___, ___, ___, 'A', ___, ___],
+        [___, ___, 'A', 'A', ___, 'A', 'A', ___, ___]]
+    assert neighboring_cells(b) == [
+        [___, TTT, TTT, TTT, ___, ___, ___, ___, ___],
+        [TTT, ___, ___, ___, ___, TTT, TTT, TTT, ___],
+        [TTT, ___, TTT, TTT, ___, TTT, ___, ___, TTT],
+        [TTT, ___, TTT, TTT, ___, ___, TTT, TTT, ___],
+        [TTT, ___, ___, ___, ___, ___, ___, ___, TTT],
+        [___, TTT, ___, TTT, TTT, TTT, ___, TTT, TTT],
+        [TTT, TTT, ___, TTT, ___, TTT, ___, ___, ___],
+        [___, ___, ___, TTT, ___, TTT, ___, TTT, TTT],
+        [TTT, TTT, ___, ___, TTT, ___, ___, TTT, ___]]
 
 # Find and return all valid plays for a given rack on a given board.
 def find_valid_plays(board, rack, first_play):
@@ -240,6 +294,9 @@ def find_valid_plays(board, rack, first_play):
                     
     return valid_plays
 
+def test_find_valid_plays():
+    return # TODO write this!
+
 # Find and return all exchanges from a given rack.
 # Put the largest exchanges last so that strategies can take advantage of that.
 def find_exchanges(rack):
@@ -250,6 +307,9 @@ def find_exchanges(rack):
             seen.add(tuple(sorted(c)))
         exch.extend([''.join(s) for s in seen])
     return exch
+
+def test_find_exchanges():
+    return # TODO write this!
 
 def draw(bag, rack):
     while bag and len(rack) < RACK_SIZE:
@@ -267,6 +327,9 @@ def exchange(bag, rack, tiles):
 def remove_played_tiles(rack, edits):
     for _, _, l in edits:
         rack.remove(l)
+
+def empty_board():
+    return [[False for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
 
 def rep_board(board):
     return '\n'.join([''.join([c if c else '.' for c in l]) for l in board])
@@ -402,7 +465,7 @@ def sim(strat1, strat2, log=False):
     strats = [strat1, strat2]
     scores = [0, 0]  
     record = [[], []]
-    board = [[False for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
+    board = empty_board()
     bag = []
     for l, f in FREQS.items():
         for i in range(f):
@@ -547,6 +610,15 @@ def compile_leave_data(num_trials, min_instances=10, log_every=100):
     for k, v in sorted(per_leave_data.items()):
         total, instances = v
         f.write("{},{},{}\n".format(k, total, instances))
+
+### BEGIN MAIN BODY ###
+
+if RUN_TESTS:
+    test_check_board()
+    test_check_lane()
+    test_neighboring_cells()
+    test_find_valid_plays()
+    test_find_exchanges()
 
 #compile_leave_data(250000)
 #sim(lookahead_1_strat, greedy_strat, log=True)
