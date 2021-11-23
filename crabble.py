@@ -3,10 +3,8 @@ import itertools
 import random
 from string import ascii_uppercase
 
-ValidPlay = namedtuple(
-    'ValidPlay', ['score', 'edits', 'scored_words'])
-
 RACK_SIZE = 5
+# The layout of "premium" tiles on the board.
 # 1 = double word, 2 = double letter, 3 = triple letter
 PREMIUMS = [[1,0,0,0,2,0,0,0,1],
             [0,1,0,0,0,0,0,1,0],
@@ -35,12 +33,26 @@ FREQS = {'A': 4, 'B': 1, 'C': 1, 'D': 1, 'E': 4, 'F': 1,
          'S': 2, 'T': 2, 'U': 1, 'V': 1, 'W': 1, 'X': 1,
          'Y': 1, 'Z': 1}
 
-# Bonus for using entire rack
+# Bonus for using entire rack.
 BINGO_BONUS = 20
 
+# Options for strategies to return.
+PLAY = 'PLAY'
+EXCHANGE = 'EXCHANGE'
+PASS = 'PASS'
+
+# Structure for a valid tile play, holding:
+## the total score of the play
+## a list of tuples with where each tile was played, and tile identities
+## a list of all the words scored
+ValidPlay = namedtuple(
+    'ValidPlay', ['score', 'edits', 'scored_words'])
+
+# Read in the words.
 f = open("words.txt", "r")
 WORDS = set([l.strip() for l in f.readlines() if len(l) <= BOARD_SIZE + 1])
 
+# Read in data on leaves (for use with some strategies)
 LEAVES = {}
 f = open("adjusted_leaves.txt", "r")
 values_total = 0
@@ -93,13 +105,10 @@ for r, v in LEAVES.items():
     f.write("{},{}\n".format(r, v))
 """
 
-# Options for strategies to return.
-PLAY = 'PLAY'
-EXCHANGE = 'EXCHANGE'
-PASS = 'PASS'
-
 # TODO: write tests for these functions
 
+# Determine whether the indicated play forms only valid words, and return
+# the score and the words if so.
 def check_board(board, edit_positions, across):
     checks = set()
     r, c = edit_positions[0]
@@ -121,15 +130,15 @@ def check_board(board, edit_positions, across):
             l = False
             if rr != BOARD_SIZE and cc != BOARD_SIZE:
                 l = board[rr][cc]
-            if l:
+            if l: # still building a word
                 w += l
                 if (rr, cc) in edit_positions:
                     has_new = True
                     m = PREMIUMS[rr][cc]
-                    if m == 1:
+                    if m == 1: # double word score
                         multiplier *= 2
                         score += value(l)
-                    else:
+                    else: # double or triple letter score, or nothing
                         score += value(l) * (m if m != 0 else 1)
                 else:
                     score += value(l)
@@ -146,6 +155,9 @@ def check_board(board, edit_positions, across):
         total_score += BINGO_BONUS
     return total_score, tuple(scored_words)
 
+# Determine where tiles would be played, starting from the given coordinates
+# and moving in the given direction. Return info on where each tile would fall
+# and at what point the play is connected with the rest of the board.
 def check_lane(board, neighbors, r, c, d, max_tiles):
     placement_info = []
     connected = False
@@ -165,6 +177,7 @@ def check_lane(board, neighbors, r, c, d, max_tiles):
         rr, cc = rr + dr, cc + dc
     return placement_info
 
+# Find and return coordinates of all cells next to a played tile.
 def neighboring_cells(board):
     neighbors = [[False for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
     for r in range(BOARD_SIZE):
@@ -177,6 +190,7 @@ def neighboring_cells(board):
                         neighbors[rr][cc] = True
     return neighbors
 
+# Find and return all valid plays for a given rack on a given board.
 def find_valid_plays(board, rack, first_play):
     valid_plays = []
     rack_len = len(rack)
@@ -226,7 +240,8 @@ def find_valid_plays(board, rack, first_play):
                     
     return valid_plays
 
-# Put the largest exchanges last so that strategies can use that.
+# Find and return all exchanges from a given rack.
+# Put the largest exchanges last so that strategies can take advantage of that.
 def find_exchanges(rack):
     exch = []
     for n in range(1, RACK_SIZE + 1):
@@ -246,8 +261,12 @@ def exchange(bag, rack, tiles):
     for l in tiles:
         exchanged.append(rack.pop(rack.index(l)))
     draw(bag, rack)
-    bag += exchanged
+    bag += exchanged # only add these after drawing new tiles
     random.shuffle(bag)
+
+def remove_played_tiles(rack, edits):
+    for _, _, l in edits:
+        rack.remove(l)
 
 def rep_board(board):
     return '\n'.join([''.join([c if c else '.' for c in l]) for l in board])
@@ -257,13 +276,6 @@ def rep_rack(rack):
 
 def rep_words(scored_words):
     return ','.join(sorted(scored_words))
-
-def copy(board):
-    return [row[:] for row in board]
-
-def remove_played_tiles(rack, edits):
-    for _, _, l in edits:
-        rack.remove(l)
 
 # ********** BEGIN STRATEGIES **********
 
@@ -292,19 +304,13 @@ def greedy_strat(valid_plays, valid_exchanges, board, rack, unseen,
     if valid_plays:
         valid_plays.sort()
         valid_plays.reverse()
-        return PLAY, valid_plays[0]
+        return PLAY, valid_plays[0] # one of the highest-scoring
     elif valid_exchanges:
         return EXCHANGE, valid_exchanges[-1] # one of the biggest possible
     else:
         return PASS, None
     
     return PLAY, valid_plays[0]
-
-def leave_strat_m(m):
-    return (lambda valid_plays, valid_exchanges, board, rack, unseen,
-            tiles_in_bag : leave_strat(
-                valid_plays, valid_exchanges, board, rack, unseen,
-                tiles_in_bag, m=m))
 
 # Adjust the score of each potential move based on data from two future moves.
 def leave_strat(valid_plays, valid_exchanges, board, rack, unseen,
@@ -329,7 +335,15 @@ def leave_strat(valid_plays, valid_exchanges, board, rack, unseen,
             best_choice = EXCHANGE, ex
     return best_choice
 
-# Assume greedy opponent, see what they do next turn.
+# Like leave_strat, but with an adjustable m parameter.
+def leave_strat_m(m):
+    return (lambda valid_plays, valid_exchanges, board, rack, unseen,
+            tiles_in_bag : leave_strat(
+                valid_plays, valid_exchanges, board, rack, unseen,
+                tiles_in_bag, m=m))
+
+# Assume a greedy opponent, see what they might do next turn in response, and
+# decide accordingly.
 def lookahead_1_strat(valid_plays, valid_exchanges, board, rack, unseen,
                       tiles_in_bag, num_trials=10, num_candidates=10):
     if not valid_plays:
@@ -425,13 +439,12 @@ def sim(strat1, strat2, log=False):
             first_play = False
         elif choice == EXCHANGE:
             wordless_turns += 1
-            if bag:
-                oldrack = racks[active][:]
-                exchange(bag, racks[active], details)
-                scoreline = "rack {}, exchanged {}, redrew to {}".format(
-                    rep_rack(oldrack), details, rep_rack(racks[active]))
-                record[active].append(
-                    (EXCHANGE, 0, rep_rack(racks[active])))
+            assert bag
+            oldrack = racks[active][:]
+            exchange(bag, racks[active], details)
+            scoreline = "rack {}, exchanged {}, redrew to {}".format(
+                rep_rack(oldrack), details, rep_rack(racks[active]))
+            record[active].append((EXCHANGE, 0, rep_rack(racks[active])))
         else: # PASS
             wordless_turns += 1
             scoreline = "rack {}, passed".format(rep_rack(racks[active]))
@@ -444,8 +457,9 @@ def sim(strat1, strat2, log=False):
             print("")
         if wordless_turns == 6:
             break
-        active = 1 - active
+        active = 1 - active # switch active player
 
+    # Handle penalties for remaining tiles in racks.
     for p in range(2):
         if racks[p]:
             penalty = sum([VALUES[l] for l in racks[p]])
@@ -455,15 +469,18 @@ def sim(strat1, strat2, log=False):
                     scores[0], scores[1], p+1, rep_rack(racks[p]), penalty))
     return scores, record
 
+# Play two strategies against each other for many trials, and report the
+# results.
 def compare_strats(strat1, strat2, num_trials, log_each_game=False,
-                   progress_update_every = 100):
+                   progress_update_every=100):
     assert num_trials % 2 == 0, "Number of trials must be even"
     wins = [0, 0]
     score_totals = [0, 0]
     strats = [strat1, strat2]
     for i in range(num_trials):
         goes_first = i % 2
-        scores, _ = sim(strats[goes_first], strats[1-goes_first], log=log_each_game)
+        scores, _ = sim(strats[goes_first], strats[1-goes_first],
+                        log=log_each_game)
         if goes_first == 0:
             score1, score2 = scores
         else:
@@ -480,12 +497,14 @@ def compare_strats(strat1, strat2, num_trials, log_each_game=False,
             wins[1] += 0.5
         score_totals[0] += score1
         score_totals[1] += score2
-    # TODO: print names of strats
-    print("Player 1 won {}, Player 2 won {}".format(wins[0], wins[1]))
-    print("Average scores: Player 1 {}, Player 2 {}".format(
-        score_totals[0] / num_trials, score_totals[1] / num_trials))
+    print(
+        "P1 ({}) won {} (avg. score {})\nP2 ({}) won {} (avg.score {})".format(
+            strat1.__name__, wins[0], round(score_totals[0] / num_trials, 1),
+            strat2.__name__, wins[1], round(score_totals[1] / num_trials, 1)))
     return wins
 
+# Run a bunch of experiments and report the st. dev. of the means of those.
+# A win rate that is 2+ st. devs. above even is "significant", roughly.
 # TODO: replace this with a binomial-based frequentist probability measure?
 # This is more complicated than it needs to be.
 def compare_strats_with_confidence(
@@ -497,12 +516,12 @@ def compare_strats_with_confidence(
             leave_strat, greedy_strat, num_trials_each, log_each_game=False,
             progress_update_every=100)
         s1s.append(s1)
-
     s1mean = sum(s1s) / num_experiments
     s1stdev = (sum([(x - s1mean)**2 for x in s1s]) / (num_experiments - 1))**0.5
-    print("Strat 1 mean wins: {} stdev: {}".format(
-        round(s1mean, 2), round(s1stdev, 2)))
+    print("P1 ({}) mean wins vs P2({}): {}, stdev: {}".format(
+        strat1.__name__, strat2.__name__, round(s1mean, 2), round(s1stdev, 2)))
 
+# Infer which leaves are associated with more success on the next two turns.
 def compile_leave_data(num_trials, min_instances=10, log_every=100):
     per_leave_data = {}
     for t in range(num_trials):
@@ -527,12 +546,11 @@ def compile_leave_data(num_trials, min_instances=10, log_every=100):
     f = open("leaves.txt", "w")
     for k, v in sorted(per_leave_data.items()):
         total, instances = v
-        if instances >= min_instances:
-            f.write("{},{}\n".format(k, v))
+        f.write("{},{},{}\n".format(k, total, instances))
 
-#compile_leave_data(100000)
+#compile_leave_data(250000)
 #sim(lookahead_1_strat, greedy_strat, log=True)
-compare_strats_with_confidence(lookahead_1_strat, greedy_strat, 20, 1000)
+compare_strats_with_confidence(leave_strat, greedy_strat, 20, 100)
 """
 for i in range(1, 10):
     print(i*0.025)
