@@ -25,8 +25,6 @@ VALUES = {'A': 1, 'B': 3, 'C': 3, 'D': 2, 'E': 1, 'F': 4,
           'M': 3, 'N': 1, 'O': 1, 'P': 3, 'Q': 10, 'R': 1,
           'S': 1, 'T': 1, 'U': 1, 'V': 4, 'W': 4, 'X': 8,
           'Y': 4, 'Z': 10}
-def value(l):
-    return VALUES.get(l, 0)
 
 # 40 tiles
 FREQS = {'A': 4, 'B': 1, 'C': 1, 'D': 1, 'E': 4, 'F': 1,
@@ -137,11 +135,11 @@ def check_board(board, edit_positions, across):
                     m = PREMIUMS[rr][cc]
                     if m == 1: # double word score
                         multiplier *= 2
-                        score += value(l)
+                        score += VALUES[l]
                     else: # double or triple letter score, or nothing
-                        score += value(l) * (m if m != 0 else 1)
+                        score += VALUES[l] * (m if m != 0 else 1)
                 else:
-                    score += value(l)
+                    score += VALUES[l]
             elif w:  # reached the end of a word, process it
                 if len(w) >= 2:
                     if w not in WORDS:
@@ -633,7 +631,7 @@ if RUN_TESTS:
     test_find_exchanges()
 
 #compile_leave_data(250000)
-#sim(lookahead_1_strat, greedy_strat, log=True)
+sim(lookahead_1_strat, greedy_strat, log=True)
 compare_strats_with_confidence(leave_strat, greedy_strat, 20, 100)
 """
 for i in range(1, 10):
