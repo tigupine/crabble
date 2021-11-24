@@ -105,65 +105,128 @@ for r, v in LEAVES.items():
     f.write("{},{}\n".format(r, v))
 """
 
+def score_lane(board, edit_positions, lane_num, is_across):
+    dr, dc = (0, 1) if is_across else (1, 0)
+    rr, cc = lane_num * dc, lane_num * dr
+    w, score, multiplier, has_new = '', 0, 1, False
+    while rr <= BOARD_SIZE and cc <= BOARD_SIZE:
+        l = False
+        if rr != BOARD_SIZE and cc != BOARD_SIZE:
+            l = board[rr][cc]
+        if l: # still building a word
+            w += l
+            if (rr, cc) in edit_positions:
+                has_new = True
+                m = PREMIUMS[rr][cc] # Only newly played tiles trigger premiums.
+                if m == 1: # double word score
+                    multiplier *= 2
+                score += VALUES[l] * (m if m > 1 else 1)
+            else:
+                score += VALUES[l]
+        elif w:  # reached the end of a word, process it
+            if has_new and len(w) >= 2:
+                if w not in WORDS:
+                    return False, -1
+                else:
+                    return w, score * multiplier
+            w, score, multiplier, has_new = '', 0, 1, False
+        rr, cc = rr + dr, cc + dc
+    return False, 0
+
+def test_score_lane():
+    ___ = False # just to make boards easier to parse visually
+    b = [['P', 'H', 'O', 'N', 'E', 'T', 'I', 'C', 'S'],
+         [___, ___, ___, 'A', ___, 'A', ___, ___, 'O'],
+         [___, ___, 'Q', 'I', ___, 'B', 'Y', 'E', 'S'],
+         [___, ___, 'K', 'V', ___, 'L', ___, ___, ___],
+         [___, ___, ___, 'E', 'M', 'E', ___, ___, ___],
+         [___, ___, 'O', 'R', ___, 'T', 'A', 'W', ___],
+         [___, ___, 'X', ___, ___, ___, ___, ___, ___],
+         [___, ___, ___, ___, ___, ___, ___, ___, ___],
+         [___, ___, ___, ___, ___, ___, ___, ___, ___]]
+    for edit_pos, score in ((((0, 0), (0, 4), (0, 8)), 68), # DW-DL-DW (possible!)
+                            (((0, 0), (0, 4)), 34),
+                            (((0, 0), (0, 8)), 64),
+                            (((0, 4), (0, 8)), 34),
+                            (((0, 0),), 32),
+                            (((0, 4),), 17),
+                            (((0, 8),), 32),
+                            (((0, 5), (0, 6), (0, 7), (0, 8)), 32)):
+        assert score_lane(b, edit_pos, 0, True) == ('PHONETICS', score)
+    assert score_lane(b, ((0, 8),), 8, False) == ('SOS', 6)
+    for edit_pos, score in ((((2, 6), (2, 7)), 17),
+                            (((2, 6), (2, 7), (2, 8)), 17),
+                            (((2, 7), (2, 8)), 9),
+                            (((2, 6),), 17),
+                            (((2, 7),), 9),
+                            (((2, 8),), 9)):
+        assert score_lane(b, edit_pos, 2, True) == ('BYES', score)
+    assert score_lane(b, ((1, 5), (2, 5), (3, 5)), 5, False) == ('TABLET', 9)
+    assert score_lane(b, ((1, 5), (2, 5), (3, 5)), 1, True) == (False, 0)
+    assert score_lane(b, ((1, 5), (2, 5), (3, 5)), 2, True) == ('BYES', 9)
+    assert score_lane(b, ((1, 5), (2, 5), (3, 5)), 3, True) == (False, 0)  
+    assert score_lane(b, ((2, 2),), 2, True) == ('QI', 31)
+    assert score_lane(b, ((5, 5), (5, 6), (5, 7)), 5, True) == ('TAW', 7)
+    assert score_lane(b, ((5, 5), (5, 6), (5, 7)), 5, False) == ('TABLET', 9)    
+    assert score_lane(b, ((5, 5), (5, 6), (5, 7)), 6, False) == (False, 0)
+    assert score_lane(b, ((3, 2),), 2, False) == (False, -1)
+    assert score_lane(b, ((3, 2),), 3, True) == (False, -1)
+
 # Determine whether the indicated play forms only valid words, and return
 # the score and the words if so.
-def check_board(board, edit_positions, across):
-    checks = set()
-    r, c = edit_positions[0]
-    if across:
-        checks.add((r, True))
-        for _, c in edit_positions:
-            checks.add((c, False))
-    else:
-        checks.add((c, False))
-        for r, _ in edit_positions:
-            checks.add((r, True))
-    total_score = 0
-    scored_words = []
-    for i, across in checks:
-        dr, dc = (0, 1) if across else (1, 0)
-        w, score, multiplier, has_new = '', 0, 1, False
-        rr, cc = i * dc, i * dr
-        while rr <= BOARD_SIZE and cc <= BOARD_SIZE:
-            l = False
-            if rr != BOARD_SIZE and cc != BOARD_SIZE:
-                l = board[rr][cc]
-            if l: # still building a word
-                w += l
-                if (rr, cc) in edit_positions:
-                    has_new = True
-                    m = PREMIUMS[rr][cc]
-                    if m == 1: # double word score
-                        multiplier *= 2
-                        score += VALUES[l]
-                    else: # double or triple letter score, or nothing
-                        score += VALUES[l] * (m if m != 0 else 1)
-                else:
-                    score += VALUES[l]
-            elif w:  # reached the end of a word, process it
-                if len(w) >= 2:
-                    if w not in WORDS:
-                        return False, None
-                    if has_new:
-                        total_score += score * multiplier
-                        scored_words.append(w)
-                w, score, multiplier, has_new = '', 0, 1, False
-            rr, cc = rr + dr, cc + dc
-    if len(edit_positions) == RACK_SIZE:
-        total_score += BINGO_BONUS
-    return total_score, tuple(scored_words)
+def score_board(board, edits, is_across):
+    valid_plays = []
+    total_perp_score = 0
+    perp_words = []
+    for i in range(len(edits)):
+        edit_r, edit_c, ok_to_score, l = edits[i]
+        board[edit_r][edit_c] = l
+        if not ok_to_score:
+            continue
+        edit_positions = [(r, c) for r, c, _, _ in edits[0: i+1]]
+        w, score = score_lane(board, edit_positions,
+                              edit_r if is_across else edit_c, is_across)
+        perp_w, perp_score = score_lane(
+            board, edit_positions, edit_c if is_across else edit_r, not is_across)
+        if perp_score == -1: # invalid word formed perpendicularly, stop trying
+            break    
+        if not w: # A valid new word must be formed in the play lane.
+            continue
+        if perp_w:
+            total_perp_score += perp_score
+            perp_words.append(perp_w)
+        valid_plays.append(
+            ValidPlay(
+                total_perp_score + score + (BINGO_BONUS if i == RACK_SIZE - 1 else 0),
+                tuple(edits[0:i+1]), tuple(sorted(perp_words + [w]))))
+    # Restore the board's original state.
+    for edit_r, edit_c, _, _ in edits:
+        board[edit_r][edit_c] = False
+    return valid_plays
 
-def test_check_board():
-    return # TODO write this!
+def test_score_board():
+    ___ = False # just to make boards easier to parse visually
+    b = [[___, ___, ___, ___, ___, ___, ___, ___, ___],
+         [___, ___, ___, ___, ___, ___, ___, ___, ___],
+         [___, ___, ___, ___, ___, ___, ___, ___, ___],
+         [___, ___, ___, ___, 'J', ___, ___, ___, ___],
+         [___, ___, ___, ___, 'O', ___, ___, ___, ___],
+         [___, ___, ___, ___, ___, ___, ___, ___, ___],
+         [___, ___, ___, ___, ___, ___, ___, ___, ___],
+         [___, ___, ___, ___, ___, ___, ___, ___, ___],
+         [___, ___, ___, ___, ___, ___, ___, ___, ___]]
+    edits = ((2, 4, True, 'V'), (2, 5, True, 'E'), (2, 6, True, 'X'))
+    assert score_board(b, edits, True) == [], score_board(b, edits, True)
+    # TODO actually write this test
 
 # Determine where tiles would be played, starting from the given coordinates
 # and moving in the given direction. Return info on where each tile would fall
 # and at what point the play is connected with the rest of the board.
-def check_lane(board, neighbors, r, c, across, max_tiles):
+def check_lane(board, neighbors, r, c, is_across, max_tiles):
     placement_info = []
     connected = False
     rr, cc = r, c
-    dr, dc = (0 if across else 1, 1 if across else 0)
+    dr, dc = (0 if is_across else 1, 1 if is_across else 0)
     results = []
     # See how many tiles need to be played for connectedness.
     for i in range(max_tiles):
@@ -265,52 +328,37 @@ def test_neighboring_cells():
 
 # Find and return all valid plays for a given rack on a given board.
 def find_valid_plays(board, rack, first_play):
-    valid_plays = []
-    rack_len = len(rack)
-    tile_sets = [set() for _ in range(rack_len)]
-    for num_tiles in range(1, rack_len + 1):
-        for com in itertools.combinations(rack, num_tiles):
-            for perm in itertools.permutations(com):
-                tile_sets[num_tiles-1].add(perm)
+    valid_plays = set()
     neighbors = neighboring_cells(board)
     for r in range(BOARD_SIZE):
         for c in range(BOARD_SIZE):
             if board[r][c]:
                 continue
-            # small optimization, could probably remove
+            # Force the first play to be in the center row or column.
             if first_play and not (r == BOARD_SIZE // 2 or c == BOARD_SIZE // 2):
                 continue
-            for across in (True, False):
-                placement_info = check_lane(board, neighbors, r, c, across,
-                                            rack_len)
+            for is_across in (True, False):
+                placement_info = check_lane(board, neighbors, r, c, is_across,
+                                            len(rack))
                 if first_play:
                     used_center_square = False
                     for rr, cc, _ in placement_info:
                         if rr == BOARD_SIZE // 2 and cc == BOARD_SIZE // 2:
                             used_center_square = True
+                            break
                     if not used_center_square:
                         continue
-                edit_positions = []
-                for i in range(len(placement_info)):
-                    rr, cc, connected = placement_info[i]
-                    edit_positions.append((rr, cc))
-                    if (not first_play) and (not connected):
-                        continue
-                    for ts in tile_sets[i]:
-                        edits = []
-                        for j in range(i+1):
-                            rrr, ccc = edit_positions[j]
-                            board[rrr][ccc] = ts[j]
-                            edits.append((rrr, ccc, ts[j]))
-                        score, scored_words = check_board(
-                            board, edit_positions, across)
-                        if score:
-                            valid_plays.append(
-                                ValidPlay(
-                                    score, tuple(edits), scored_words))
-                        for rrr, ccc in edit_positions:
-                            board[rrr][ccc] = False
-                    
+                # TODO: Instead of feeding every permutation in, do some clever
+                # backtracking within score_board itself. This would avoid some
+                # redundant work.
+                for p in set(itertools.permutations(rack)):
+                    edits = []
+                    for i in range(len(placement_info)):
+                        rr, cc, connected = placement_info[i]
+                        edits.append((rr, cc, first_play or connected, p[i]))
+                    vps = score_board(board, edits, is_across)
+                    for vp in vps:
+                        valid_plays.add(vp)
     return valid_plays
 
 def test_find_valid_plays():
@@ -356,7 +404,7 @@ def exchange(bag, rack, tiles):
     random.shuffle(bag)
 
 def remove_played_tiles(rack, edits):
-    for _, _, l in edits:
+    for _, _, _, l in edits:
         rack.remove(l)
 
 def empty_board():
@@ -374,7 +422,7 @@ def rep_words(scored_words):
 # ********** BEGIN STRATEGIES **********
 
 # A strategy takes the following inputs:
-# valid_plays: list of all valid plays, each as a ValidPlay tuple
+# valid_plays: set of all valid plays, each as a ValidPlay tuple
 # board: the current board
 # rack: the active player's rack
 # unseen: the remaining contents of the bag + opponent's rack (sorted)
@@ -386,9 +434,9 @@ def rep_words(scored_words):
 def random_strat(valid_plays, valid_exchanges, board, rack, unseen,
                  tiles_in_bag):
     if valid_plays:
-        return PLAY, random.choice(valid_plays)
+        return PLAY, random.choice(list(valid_plays))
     elif valid_exchanges:
-        return EXCHANGE, random.choice(valid_exchanges)
+        return EXCHANGE, random.choice(list(valid_exchanges))
     else:
         return PASS, None
 
@@ -396,11 +444,9 @@ def random_strat(valid_plays, valid_exchanges, board, rack, unseen,
 def greedy_strat(valid_plays, valid_exchanges, board, rack, unseen,
                  tiles_in_bag):
     if valid_plays:
-        valid_plays.sort()
-        valid_plays.reverse()
-        return PLAY, valid_plays[0] # one of the highest-scoring
+        return PLAY, sorted(list(valid_plays))[-1] # one of highest-scoring
     elif valid_exchanges:
-        return EXCHANGE, valid_exchanges[-1] # one of the biggest possible
+        return EXCHANGE, sorted(list(valid_exchanges))[-1] # one of biggest
     else:
         return PASS, None
     
@@ -447,16 +493,15 @@ def lookahead_1_strat(valid_plays, valid_exchanges, board, rack, unseen,
             return PASS, None
     best_delta = -1000
     best_play = None
-    valid_plays.sort()
-    valid_plays.reverse()
-    # Only look at the highest-scoring valid plays, to save time.
+    num_candidates = min(len(valid_plays), num_candidates)
+    candidates = sorted(list(valid_plays))[-num_candidates:]
     # Use the same set of "next tiles" for each play, to compare on equal terms.
     opp_scores = [0]*num_candidates
     for _ in range(num_trials):
         next_tiles = random.sample(unseen, min(len(unseen), 10))
-        for i in range(min(len(valid_plays), num_candidates)):
-            edits = valid_plays[i].edits
-            for rr, cc, l in edits:
+        for i in range(len(candidates)):
+            edits = candidates[i].edits
+            for rr, cc, _, l in edits:
                 board[rr][cc] = l
             opp_rack = next_tiles[
                 len(edits) : min(len(edits) + RACK_SIZE, len(next_tiles)-1)]
@@ -470,13 +515,13 @@ def lookahead_1_strat(valid_plays, valid_exchanges, board, rack, unseen,
                                            None, None, None, None)
             if choice == PLAY:
                 opp_scores[i] += details[0]
-            for rr, cc, _ in edits:
+            for rr, cc, _, _ in edits:
                 board[rr][cc] = False
-    for i in range(min(len(valid_plays), num_candidates)):
-        delta = valid_plays[i].score - (opp_scores[i] / num_trials)
+    for i in range(len(candidates)):
+        delta = candidates[i].score - (opp_scores[i] / num_trials)
         if delta > best_delta:
             best_delta = delta
-            best_play = valid_plays[i]
+            best_play = candidates[i]
     return PLAY, best_play
 
 def endgame_strat(valid_plays, valid_exchanges, board, rack, unseen,
@@ -519,7 +564,7 @@ def sim(strat1, strat2, log=False):
                 sorted(racks[1-active] + bag), len(bag))
         if choice == PLAY:
             score, edits, scored_words = details
-            for rr, cc, l in edits:
+            for rr, cc, _, l in edits:
                 board[rr][cc] = l
             old_rack = racks[active][:]
             remove_played_tiles(racks[active], edits)
@@ -612,7 +657,7 @@ def compare_strats_with_confidence(
         s1s.append(s1)
     s1mean = sum(s1s) / num_experiments
     s1stdev = (sum([(x - s1mean)**2 for x in s1s]) / (num_experiments - 1))**0.5
-    print("P1 ({}) mean wins vs P2({}): {}, stdev: {}".format(
+    print("P1 ({}) mean wins vs P2 ({}): {}, stdev: {}".format(
         strat1.__name__, strat2.__name__, round(s1mean, 2), round(s1stdev, 2)))
 
 # Infer which leaves are associated with more success on the next two turns.
@@ -645,15 +690,17 @@ def compile_leave_data(num_trials, min_instances=10, log_every=100):
 ### BEGIN MAIN BODY ###
 
 if RUN_TESTS:
-    test_check_board()
+    test_score_lane()
+    test_score_board() # TODO WRITE
     test_check_lane()
     test_neighboring_cells()
-    test_find_valid_plays()
+    test_find_valid_plays() # TODO WRITE
     test_find_exchanges()
 
-compile_leave_data(100000)
+#compile_leave_data(100000)
+#sim(random_strat, leave_strat, log=True)
 #sim(lookahead_1_strat, greedy_strat, log=True)
-#compare_strats_with_confidence(leave_strat, greedy_strat, 20, 100)
+compare_strats_with_confidence(leave_strat, greedy_strat, 20, 100)
 """
 for i in range(1, 10):
     print(i*0.025)
