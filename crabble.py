@@ -58,15 +58,34 @@ f = open("adjusted_leaves.txt", "r")
 values_total = 0
 for l in f.readlines():
     leave, v = l.strip().split(',')
-    vv = float(v)
-    values_total += vv
     LEAVES[leave] = float(vv)
-AVERAGE_LEAVE_VALUE = round(values_total / len(LEAVES), 1)
 
 """
-# Fill in missing leave values.
-# TODO move this elsewhere as its own function
+# *** CODE FOR ESTIMATING LEAVES ***
 
+leave_counts = {}
+leave_totals = {}
+for lname in ("leaves1_250000.txt", "leaves2_150000.txt",
+              "leaves3_250000.txt", "leaves4_100000.txt"):
+    f = open(lname, "r")
+    d = [l.strip().split(',') for l in f.readlines()]
+    for leave, total, count in d:
+        if leave not in leave_counts:
+            leave_counts[leave] = 0
+            leave_totals[leave] = 0  
+        leave_counts[leave] += int(count)
+        leave_totals[leave] += int(total)
+LEAVES = {}
+for k in leave_counts.keys():
+    if leave_counts[k] >= 10: # make sure data is representative-ish
+        LEAVES[k] = round(leave_totals[k] / leave_counts[k], 1)
+AVERAGE_LEAVE_VALUE = sum(LEAVES.values()) / len(LEAVES)
+
+#s = sorted([(v, k) for k, v in LEAVES.items()])
+#print(s[0:20])
+#print(s[-20:])
+
+# Fill in missing leave values.
 def nearby_racks(r):
     nearby = []
     for index in range(len(r)):
@@ -99,11 +118,11 @@ for n in range(1, RACK_SIZE):
                     (rack, round(sum([LEAVES[rr] for rr in nb]) / len(nb), 1)))
 for r, v in estimates:
     LEAVES[r] = v
+"""
 
 f = open("adjusted_leaves.txt", "w")
 for r, v in LEAVES.items():
     f.write("{},{}\n".format(r, v))
-"""
 
 # Check the validity of / calculate the score of the new word (if any) formed
 # in a lane. 
@@ -513,8 +532,8 @@ def exchange(bag, rack, tiles):
     bag += exchanged # only add these after drawing new tiles
     random.shuffle(bag)
 
-def remove_played_tiles(rack, edits):
-    for _, _, l in edits:
+def remove_played_tiles(rack, to_remove):
+    for l in to_remove:
         rack.remove(l)
 
 def empty_board():
@@ -569,17 +588,16 @@ def leave_strat(valid_plays, valid_exchanges, board, rack, unseen,
     best_choice = PASS, None
     for v in valid_plays:
         r_copy = rack[:]
-        remove_played_tiles(r_copy, v.edits)
+        remove_played_tiles(r_copy, [t for _, _, t in v.edits])
         r_copy.sort()
         adj_score = v.score + m * LEAVES[''.join(r_copy)]
         if adj_score > best_adj_score:
             best_adj_score = adj_score
             best_choice = PLAY, v
     for ex in valid_exchanges:
-        if len(ex) == RACK_SIZE:
-            adj_score = m * AVERAGE_LEAVE_VALUE
-        else:
-            adj_score = m * LEAVES[ex]
+        leave = rack[:]
+        remove_played_tiles(leave, ex)
+        adj_score = m * LEAVES[leave]
         if adj_score > best_adj_score:
             best_adj_score = adj_score
             best_choice = EXCHANGE, ex
@@ -676,7 +694,7 @@ def sim(strat1, strat2, log=False):
             for rr, cc, l in edits:
                 board[rr][cc] = l
             old_rack = racks[active][:]
-            remove_played_tiles(racks[active], edits)
+            remove_played_tiles(racks[active], [l for _, _, l in edits])
             scores[active] += score
             scoreline = "rack {}, played r{}c{} {}  score {}".format(
                 rep_rack(old_rack), edits[0][0]+1, edits[0][1]+1,
@@ -807,12 +825,10 @@ if RUN_TESTS:
     test_find_exchanges()
 
 #compile_leave_data(250000)
-sim(random_strat, leave_strat, log=True)
-sim(lookahead_1_strat, greedy_strat, log=True)
-compare_strats_with_confidence(lookahead_1_strat, greedy_strat, 20, 10)
-"""
-for i in range(1, 10):
+#sim(random_strat, leave_strat, log=True)
+#sim(lookahead_1_strat, greedy_strat, log=True)
+#compare_strats_with_confidence(lookahead_1_strat, greedy_strat, 20, 10)
+for i in range(1, 11):
     print(i*0.025)
-    compare_strats(leave_strat_m(i*0.1), greedy_strat, 5000,
+    compare_strats(leave_strat_m(i*0.1), greedy_strat, 1000,
                    progress_update_every=100000)
-"""
