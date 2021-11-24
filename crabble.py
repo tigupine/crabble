@@ -220,28 +220,67 @@ def score_board(board, edits, is_across):
 def test_score_board(): # TODO add more to this test!
     ___ = False # just to make boards easier to parse visually
     b = [[___, ___, ___, ___, ___, ___, ___, ___, ___],
-         [___, ___, ___, ___, ___, ___, ___, ___, ___],
-         [___, ___, ___, ___, ___, ___, ___, ___, ___],
-         [___, ___, ___, ___, ___, ___, ___, ___, ___],
-         [___, ___, 'A', 'H', 'E', 'A', 'D', ___, ___],
+         [___, ___, ___, 'T', 'U', 'R', 'F', ___, ___],
+         [___, ___, ___, 'I', ___, ___, 'O', ___, ___],
+         [___, ___, ___, ___, ___, ___, 'A', ___, ___],
+         [___, ___, ___, ___, 'A', 'R', 'M', ___, ___],
          [___, ___, ___, ___, ___, ___, ___, ___, ___],
          [___, ___, ___, ___, ___, ___, ___, ___, ___],
          [___, ___, ___, ___, ___, ___, ___, ___, ___],
          [___, ___, ___, ___, ___, ___, ___, ___, ___]]
+    edits = ((2, 2, True, 'P'),)
+    assert score_board(b, edits, True) == (
+        ValidPlay(10, ((2, 2, 'P'),), ('PI',)),)
+    edits = ((3, 1, False, 'S'), (3, 2, False, 'O'), (3, 3, True, 'P'),
+             (3, 4, True, 'H'), (3, 5, True, 'S'))
+    assert score_board(b, edits, True) == (
+        (ValidPlay(16, ((3, 1, 'S'), (3, 2, 'O'), (3, 3, 'P')),
+                   ('SOP', 'TIP')),
+         ValidPlay(25, ((3, 1, 'S'), (3, 2, 'O'), (3, 3, 'P'), (3, 4, 'H')),
+                   ('HA', 'SOPH', 'TIP'))))
+    b = empty_board()
+    b[4][2:6] = ['A', 'H', 'E', 'A', 'D']
     edits = ((3, 2, True, 'T'), (3, 3, True, 'O'), (3, 4, True, 'R'),
              (3, 5, True, 'T'), (3, 6, True, 'E'))
     # Note that the across play of just T is not considered valid. The
     # down version is the one we want to use.
     assert score_board(b, edits, True) == (
         (ValidPlay(11, ((3, 2, 'T'), (3, 3, 'O')), ('OH', 'TA', 'TO')),
-        ValidPlay(14, ((3, 2, 'T'), (3, 3, 'O'), (3, 4, 'R')),
-                  ('OH', 'RE', 'TA', 'TOR')),
-        ValidPlay(19, ((3, 2, 'T'), (3, 3, 'O'), (3, 4, 'R'), (3, 5, 'T')),
-                  ('OH', 'RE', 'TA', 'TA', 'TORT')),
-        ValidPlay(43,
-                  ((3, 2, 'T'), (3, 3, 'O'), (3, 4, 'R'), (3, 5, 'T'),
-                   (3, 6, 'E')),
-                  ('ED', 'OH', 'RE', 'TA', 'TA', 'TORTE'))))
+         ValidPlay(14, ((3, 2, 'T'), (3, 3, 'O'), (3, 4, 'R')),
+                   ('OH', 'RE', 'TA', 'TOR')),
+         ValidPlay(19, ((3, 2, 'T'), (3, 3, 'O'), (3, 4, 'R'), (3, 5, 'T')),
+                   ('OH', 'RE', 'TA', 'TA', 'TORT')),
+         ValidPlay(43,
+                   ((3, 2, 'T'), (3, 3, 'O'), (3, 4, 'R'), (3, 5, 'T'),
+                    (3, 6, 'E')),
+                   ('ED', 'OH', 'RE', 'TA', 'TA', 'TORTE'))))
+    # Make sure we actually get the down version!
+    assert ValidPlay(2, ((3, 2, 'T'),), ('TA',)) in score_board(
+        b, edits, False)
+    edits = ((3, 2, True, 'H'), (3, 3, True, 'O'), (3, 4, True, 'R'),
+             (3, 5, True, 'S'), (3, 6, True, 'E'))
+    assert score_board(b, edits, True) == (
+         ValidPlay(17, ((3, 2, 'H'), (3, 3, 'O')), ('HA', 'HO', 'OH')),)
+    b = empty_board()
+    edits = ((0, 4, False, 'T'), (1, 4, False, 'O'), (2, 4, False, 'R'),
+             (3, 4, False, 'T'), (4, 4, False, 'H'))
+    assert score_board(b, edits, False) == tuple()
+    edits = ((1, 4, False, 'T'), (2, 4, False, 'O'), (3, 4, False, 'R'),
+             (4, 4, True, 'T'), (5, 4, True, 'H'))
+    assert score_board(b, edits, False) == (
+        (ValidPlay(8, ((1, 4, 'T'), (2, 4, 'O'), (3, 4, 'R'), (4, 4, 'T')),
+                   ('TORT',)),))
+    b = empty_board()
+    b[2][4] = 'V'
+    b[3][4] = 'E'
+    b[4][4] = 'T'
+    edits = ((1, 4, True, 'K'), (5, 4, True, 'C'), (6, 4, True, 'H'),
+             (7, 4, True, 'Y'), (8, 4, True, 'Q'))
+    assert score_board(b, edits, False) == (
+        (ValidPlay(18, ((1, 4, 'K'), (5, 4, 'C'), (6, 4, 'H')),
+                   ('KVETCH',)),
+         ValidPlay(22, ((1, 4, 'K'), (5, 4, 'C'), (6, 4, 'H'), (7, 4, 'Y')),
+                   ('KVETCHY',))))
 
 # Determine where tiles would be played, starting from the given coordinates
 # and moving in the given direction. Return info on where each tile would fall
@@ -257,16 +296,27 @@ def check_lane(board, neighbors, r, c, is_across, max_tiles):
         while rr < BOARD_SIZE and cc < BOARD_SIZE and board[rr][cc]:
             rr, cc = rr + dr, cc + dc
         if rr == BOARD_SIZE or cc == BOARD_SIZE:
-            return placement_info
+            return tuple(placement_info)
         if neighbors[rr][cc]:
             connected = True
         placement_info.append((rr, cc, connected))
         # pretend to place a tile
         rr, cc = rr + dr, cc + dc
-    return placement_info
+    return tuple(placement_info)
 
 def test_check_lane():
     ___ = False # just to make boards easier to parse visually
+    b = empty_board()
+    n = neighboring_cells(b)
+    assert check_lane(b, n, 0, 4, False, 5) == (
+        (0, 4, False), (1, 4, False), (2, 4, False), (3, 4, False),
+        (4, 4, True))
+    assert check_lane(b, n, 4, 0, True, 4) == (
+        (4, 0, False), (4, 1, False), (4, 2, False), (4, 3, False))
+    assert check_lane(b, n, 4, 4, True, 1) == ((4, 4, True),)
+    assert check_lane(b, n, 5, 2, True, 5) == (
+        (5, 2, False), (5, 3, False), (5, 4, False), (5, 5, False),
+        (5, 6, False))
     b = [[___, ___, ___, ___, ___, ___, ___, ___, ___],
          [___, ___, ___, ___, ___, ___, ___, ___, ___],
          [___, ___, ___, ___, ___, 'A', ___, ___, ___],
@@ -277,48 +327,58 @@ def test_check_lane():
          [___, ___, ___, ___, ___, ___, ___, ___, ___],
          [___, ___, ___, ___, ___, ___, ___, ___, ___]]
     n = neighboring_cells(b)
-    assert check_lane(b, n, 1, 2, True, 5) == [
-        (1, 2, False), (1, 3, False), (1, 4, False), (1, 5, True), (1, 6, True)]
-    assert check_lane(b, n, 3, 0, True, 5) == [
-        (3, 0, True), (3, 2, True), (3, 4, True), (3, 6, True), (3, 8, True)]
-    assert check_lane(b, n, 5, 8, False, 5) == [
-        (5, 8, False), (6, 8, False), (7, 8, False), (8, 8, False)]
-    assert check_lane(b, n, 2, 3, False, 5) == [
-        (2, 3, True), (5, 3, True), (7, 3, True), (8, 3, True)]
-    assert check_lane(b, n, 5, 3, True, 1) == [(5, 3, True)]
-    assert check_lane(b, n, 0, 0, False, 3) == [
-        (0, 0, False), (1, 0, False), (2, 0, False)]
+    assert check_lane(b, n, 1, 2, True, 5) == (
+        (1, 2, False), (1, 3, False), (1, 4, False), (1, 5, True), (1, 6, True))
+    assert check_lane(b, n, 3, 0, True, 5) == (
+        (3, 0, True), (3, 2, True), (3, 4, True), (3, 6, True), (3, 8, True))
+    assert check_lane(b, n, 5, 8, False, 5) == (
+        (5, 8, False), (6, 8, False), (7, 8, False), (8, 8, False))
+    assert check_lane(b, n, 2, 3, False, 5) == (
+        (2, 3, True), (5, 3, True), (7, 3, True), (8, 3, True))
+    assert check_lane(b, n, 5, 3, True, 1) == ((5, 3, True),)
+    assert check_lane(b, n, 0, 0, False, 3) == (
+        (0, 0, False), (1, 0, False), (2, 0, False))
 
 # Find and return coordinates of all cells next to a played tile.
 def neighboring_cells(board):
     neighbors = [[False for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
-    for r in range(BOARD_SIZE):
-        for c in range(BOARD_SIZE):
-            if board[r][c]:
-                for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-                    rr, cc = r + dr, c + dc
-                    if (0 <= rr < BOARD_SIZE and 0 <= cc < BOARD_SIZE
-                        and not board[rr][cc]):
-                        neighbors[rr][cc] = True
+    if not board[BOARD_SIZE // 2][BOARD_SIZE // 2]:
+        neighbors[BOARD_SIZE // 2][BOARD_SIZE // 2] = True
+    else:
+        for r in range(BOARD_SIZE):
+            for c in range(BOARD_SIZE):
+                if board[r][c]:
+                    for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                        rr, cc = r + dr, c + dc
+                        if (0 <= rr < BOARD_SIZE and 0 <= cc < BOARD_SIZE
+                            and not board[rr][cc]):
+                            neighbors[rr][cc] = True
     return neighbors
 
 def test_neighboring_cells():
     ___ = False # just to make boards easier to parse visually
     TTT = True
     b = empty_board()
-    assert neighboring_cells(b) == b
-    b[4][4] = 'A'
+    n = neighboring_cells(b)
+    for r in range(BOARD_SIZE):
+        for c in range(BOARD_SIZE):
+            if (r, c) == (BOARD_SIZE // 2, BOARD_SIZE // 2):
+                assert n[r][c]
+            else:
+                assert not n[r][c]
+    b[3][4] = ['A']
+    b[4][4] = ['A']
     assert neighboring_cells(b) == [
         [___, ___, ___, ___, ___, ___, ___, ___, ___],
         [___, ___, ___, ___, ___, ___, ___, ___, ___],
-        [___, ___, ___, ___, ___, ___, ___, ___, ___],
         [___, ___, ___, ___, TTT, ___, ___, ___, ___],
+        [___, ___, ___, TTT, ___, TTT, ___, ___, ___],
         [___, ___, ___, TTT, ___, TTT, ___, ___, ___],
         [___, ___, ___, ___, TTT, ___, ___, ___, ___],
         [___, ___, ___, ___, ___, ___, ___, ___, ___],
         [___, ___, ___, ___, ___, ___, ___, ___, ___],
         [___, ___, ___, ___, ___, ___, ___, ___, ___]]
-    b[3][4], b[4][3], b[4][5], b[5][4] = 'A', 'A', 'A', 'A'
+    b[4][3], b[4][5], b[5][4] = 'A', 'A', 'A'
     assert neighboring_cells(b) == [
         [___, ___, ___, ___, ___, ___, ___, ___, ___],
         [___, ___, ___, ___, ___, ___, ___, ___, ___],
@@ -352,28 +412,15 @@ def test_neighboring_cells():
 
 # Find and return all valid plays for a given rack on a given board.
 def find_valid_plays(board, rack):
-    first_play = not board[BOARD_SIZE // 2][BOARD_SIZE // 2]
     valid_plays = set()
     neighbors = neighboring_cells(board)
     for r in range(BOARD_SIZE):
         for c in range(BOARD_SIZE):
             if board[r][c]:
                 continue
-            # Force the first play to be in the center row or column.
-            if first_play and not (
-                r == BOARD_SIZE // 2 or c == BOARD_SIZE // 2):
-                continue
             for is_across in (True, False):
                 placement_info = check_lane(board, neighbors, r, c, is_across,
                                             len(rack))
-                if first_play:
-                    used_center_square = False
-                    for rr, cc, _ in placement_info:
-                        if rr == BOARD_SIZE // 2 and cc == BOARD_SIZE // 2:
-                            used_center_square = True
-                            break
-                    if not used_center_square:
-                        continue
                 # TODO: Instead of feeding every permutation in, do some clever
                 # backtracking within score_board itself. This would avoid some
                 # redundant work.
@@ -381,7 +428,7 @@ def find_valid_plays(board, rack):
                     edits = []
                     for i in range(len(placement_info)):
                         rr, cc, connected = placement_info[i]
-                        edits.append((rr, cc, first_play or connected, p[i]))
+                        edits.append((rr, cc, connected, p[i]))
                     vps = score_board(board, edits, is_across)
                     for vp in vps:
                         valid_plays.add(vp)
@@ -753,16 +800,16 @@ def compile_leave_data(num_trials, min_instances=10, log_every=100):
 
 if RUN_TESTS:
     test_score_lane()
-    test_score_board() # TODO WRITE
+    test_score_board()
     test_check_lane()
     test_neighboring_cells()
-    test_find_valid_plays() # TODO WRITE
+    test_find_valid_plays()
     test_find_exchanges()
 
-#compile_leave_data(100000)
+#compile_leave_data(250000)
 sim(random_strat, leave_strat, log=True)
 sim(lookahead_1_strat, greedy_strat, log=True)
-compare_strats_with_confidence(lookahead_1_strat, greedy_strat, 20, 100)
+compare_strats_with_confidence(lookahead_1_strat, greedy_strat, 20, 10)
 """
 for i in range(1, 10):
     print(i*0.025)
