@@ -58,7 +58,7 @@ f = open("adjusted_leaves.txt", "r")
 values_total = 0
 for l in f.readlines():
     leave, v = l.strip().split(',')
-    LEAVES[leave] = float(vv)
+    LEAVES[leave] = float(v)
 
 """
 # *** CODE FOR ESTIMATING LEAVES ***
@@ -118,11 +118,13 @@ for n in range(1, RACK_SIZE):
                     (rack, round(sum([LEAVES[rr] for rr in nb]) / len(nb), 1)))
 for r, v in estimates:
     LEAVES[r] = v
-"""
+
+print(LEAVES['JMSX'])
 
 f = open("adjusted_leaves.txt", "w")
-for r, v in LEAVES.items():
-    f.write("{},{}\n".format(r, v))
+for k in sorted(LEAVES.keys()):
+    f.write("{},{}\n".format(k, LEAVES[k]))
+"""
 
 # Check the validity of / calculate the score of the new word (if any) formed
 # in a lane. 
@@ -597,7 +599,7 @@ def leave_strat(valid_plays, valid_exchanges, board, rack, unseen,
     for ex in valid_exchanges:
         leave = rack[:]
         remove_played_tiles(leave, ex)
-        adj_score = m * LEAVES[leave]
+        adj_score = m * LEAVES[''.join(sorted(leave))]
         if adj_score > best_adj_score:
             best_adj_score = adj_score
             best_choice = EXCHANGE, ex
@@ -828,7 +830,7 @@ if RUN_TESTS:
 #sim(random_strat, leave_strat, log=True)
 #sim(lookahead_1_strat, greedy_strat, log=True)
 #compare_strats_with_confidence(lookahead_1_strat, greedy_strat, 20, 10)
-for i in range(1, 11):
-    print(i*0.025)
-    compare_strats(leave_strat_m(i*0.1), greedy_strat, 1000,
+for i in range(1, 21):
+    print(i*0.1)
+    compare_strats(leave_strat_m(i*0.1), greedy_strat, 2500,
                    progress_update_every=100000)
