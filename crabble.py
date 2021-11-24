@@ -351,7 +351,8 @@ def test_neighboring_cells():
         [TTT, TTT, ___, ___, TTT, ___, ___, TTT, ___]]
 
 # Find and return all valid plays for a given rack on a given board.
-def find_valid_plays(board, rack, first_play):
+def find_valid_plays(board, rack):
+    first_play = not board[BOARD_SIZE // 2][BOARD_SIZE // 2]
     valid_plays = set()
     neighbors = neighboring_cells(board)
     for r in range(BOARD_SIZE):
@@ -388,10 +389,24 @@ def find_valid_plays(board, rack, first_play):
 
 # Light overall functionality test since the innards are well-unit tested.
 def test_find_valid_plays():
+    ___ = False # just to make boards easier to parse visually
+    b = [[___, ___, ___, ___, ___, ___, 'F', 'O', 'X'],
+         [___, ___, ___, ___, ___, ___, 'O', 'R', ___],
+         [___, ___, ___, ___, ___, 'P', 'E', 'T', ___],
+         [___, ___, ___, ___, 'J', 'O', ___, ___, ___],
+         [___, ___, ___, ___, 'A', 'I', 'T', ___, 'H'],
+         [___, ___, ___, ___, 'B', ___, 'S', ___, 'U'],
+         [___, ___, 'M', 'A', 'S', ___, 'K', 'A', 'E'],
+         [___, 'Q', 'I', ___, ___, ___, ___, 'G', ___],
+         ['A', 'I', 'L', ___, ___, ___, 'C', 'E', 'E']]
+    assert not find_valid_plays(b, 'NNYZ')
+    vp = find_valid_plays(b, 'DRVW')
+    assert len(vp) == 1
+    assert list(vp)[0] == ValidPlay(7, ((4, 3, 'W'),), ('WAIT',))
     b = empty_board()
-    assert not find_valid_plays(b, 'CHKVY', True)
+    assert not find_valid_plays(b, 'CHKVY')
     b[4][4:5] = ['E', 'T']
-    vps = find_valid_plays(b, 'CHKVY', False)
+    vps = find_valid_plays(b, 'CHKVY')
     assert ValidPlay(
         46,
          ((4, 2, 'K'), (4, 3, 'V'), (4, 6, 'C'), (4, 7, 'H'), (4, 8, 'Y')),
@@ -402,7 +417,7 @@ def test_find_valid_plays():
          ('YECH',)) in vps
     b = empty_board()
     b[4][2:6] = ['A', 'H', 'E', 'A', 'D']
-    vps = find_valid_plays(b, 'EORTT', False)
+    vps = find_valid_plays(b, 'EORTT')
     assert ValidPlay(
         43,
         ((3, 2, 'T'), (3, 3, 'O'), (3, 4, 'R'), (3, 5, 'T'), (3, 6, 'E')),
@@ -557,7 +572,7 @@ def lookahead_1_strat(valid_plays, valid_exchanges, board, rack, unseen,
                 find_exchanges(opp_rack)
                 if tiles_in_bag - len(edits) - len(opp_rack) >= RACK_SIZE
                 else [])
-            opp_valid_plays = find_valid_plays(board, opp_rack, False)
+            opp_valid_plays = find_valid_plays(board, opp_rack)
             # Skip the last four inputs because greedy_strat doesn't use them.
             choice, details = greedy_strat(
                 opp_valid_plays, opp_valid_exchanges, None, None, None, None)
@@ -599,12 +614,11 @@ def sim(strat1, strat2, log=False):
     draw(bag, racks[0])
     draw(bag, racks[1])
     active = 0  # 0 on first player's turn, 1 on second player's turn
-    first_play = True  # whether or not board is empty
     if log:
         print("\nGAME START!\n")
     wordless_turns = 0 # the game ends automatically after 6 wordless turns
     while racks[0] and racks[1]: # or when a rack is empty
-        valid_plays = find_valid_plays(board, racks[active], first_play)
+        valid_plays = find_valid_plays(board, racks[active])
         valid_exchanges = (
             find_exchanges(racks[active]) if len(bag) >= RACK_SIZE else [])
         choice, details = strats[active](
@@ -623,7 +637,6 @@ def sim(strat1, strat2, log=False):
             record[active].append((PLAY, score, rep_rack(racks[active])))
             draw(bag, racks[active])
             wordless_turns = 0
-            first_play = False
         elif choice == EXCHANGE:
             wordless_turns += 1
             assert bag
