@@ -173,6 +173,16 @@ def test_score_lane():
     assert score_lane(b, ((5, 5), (5, 6), (5, 7)), 6, False) == (False, 0)
     assert score_lane(b, ((3, 2),), 2, False) == (False, -1)
     assert score_lane(b, ((3, 2),), 3, True) == (False, -1)
+    b = empty_board()
+    b[4] = [False, False, False, 'V', 'E', 'T', 'C', 'H', False]
+    assert (score_lane(
+        b, ((4, 3), (4, 4), (4, 5), (4, 6), (4, 7)), 4, True) == (
+            'VETCH', 26))
+    b[4][2] = 'K'
+    b[4][8] = 'Y'
+    assert (score_lane(
+        b, ((4, 2), (4, 3), (4, 6), (4, 7), (4, 8)), 4, True) == (
+            'KVETCHY', 26))
 
 # Find all valid plays on this board using any prefix of the tileset used to
 # create it.
@@ -185,43 +195,53 @@ def score_board(board, edits, is_across):
         board[edit_r][edit_c] = l
         if not ok_to_score:
             continue
-        edit_positions = [(r, c) for r, c, _, _ in edits[0: i+1]]
+        edit_positions = [(r, c) for r, c, _, _ in edits[0:i+1]]
         w, score = score_lane(board, edit_positions,
                               edit_r if is_across else edit_c, is_across)
         perp_w, perp_score = score_lane(
             board, edit_positions, edit_c if is_across else edit_r,
             not is_across)
         if perp_score == -1: # invalid word formed perpendicularly, stop trying
-            break    
-        if not w: # A valid new word must be formed in the play lane.
-            continue
+            break
         if perp_w:
             total_perp_score += perp_score
             perp_words.append(perp_w)
-        valid_plays.append(
-            ValidPlay(
+        if w: # A valid new word must be formed in the play lane.
+            valid_plays.append(ValidPlay(
                 total_perp_score + score + (
                     BINGO_BONUS if i == RACK_SIZE - 1 else 0),
-                tuple(edits[0:i+1]), tuple(sorted(perp_words + [w]))))
+                tuple([(r, c, l) for r, c, _, l in edits[0:i+1]]),
+                tuple(sorted(perp_words + [w]))))
     # Restore the board's original state.
     for edit_r, edit_c, _, _ in edits:
         board[edit_r][edit_c] = False
-    return valid_plays
+    return tuple(valid_plays)
 
-def test_score_board():
+def test_score_board(): # TODO add more to this test!
     ___ = False # just to make boards easier to parse visually
     b = [[___, ___, ___, ___, ___, ___, ___, ___, ___],
          [___, ___, ___, ___, ___, ___, ___, ___, ___],
          [___, ___, ___, ___, ___, ___, ___, ___, ___],
-         [___, ___, ___, ___, 'J', ___, ___, ___, ___],
-         [___, ___, ___, ___, 'O', ___, ___, ___, ___],
+         [___, ___, ___, ___, ___, ___, ___, ___, ___],
+         [___, ___, 'A', 'H', 'E', 'A', 'D', ___, ___],
          [___, ___, ___, ___, ___, ___, ___, ___, ___],
          [___, ___, ___, ___, ___, ___, ___, ___, ___],
          [___, ___, ___, ___, ___, ___, ___, ___, ___],
          [___, ___, ___, ___, ___, ___, ___, ___, ___]]
-    edits = ((2, 4, True, 'V'), (2, 5, True, 'E'), (2, 6, True, 'X'))
-    assert score_board(b, edits, True) == [], score_board(b, edits, True)
-    # TODO actually write this test
+    edits = ((3, 2, True, 'T'), (3, 3, True, 'O'), (3, 4, True, 'R'),
+             (3, 5, True, 'T'), (3, 6, True, 'E'))
+    # Note that the across play of just T is not considered valid. The
+    # down version is the one we want to use.
+    assert score_board(b, edits, True) == (
+        (ValidPlay(11, ((3, 2, 'T'), (3, 3, 'O')), ('OH', 'TA', 'TO')),
+        ValidPlay(14, ((3, 2, 'T'), (3, 3, 'O'), (3, 4, 'R')),
+                  ('OH', 'RE', 'TA', 'TOR')),
+        ValidPlay(19, ((3, 2, 'T'), (3, 3, 'O'), (3, 4, 'R'), (3, 5, 'T')),
+                  ('OH', 'RE', 'TA', 'TA', 'TORT')),
+        ValidPlay(43,
+                  ((3, 2, 'T'), (3, 3, 'O'), (3, 4, 'R'), (3, 5, 'T'),
+                   (3, 6, 'E')),
+                  ('ED', 'OH', 'RE', 'TA', 'TA', 'TORTE'))))
 
 # Determine where tiles would be played, starting from the given coordinates
 # and moving in the given direction. Return info on where each tile would fall
@@ -366,8 +386,31 @@ def find_valid_plays(board, rack, first_play):
                         valid_plays.add(vp)
     return valid_plays
 
+# Light overall functionality test since the innards are well-unit tested.
 def test_find_valid_plays():
-    return # TODO write this!
+    b = empty_board()
+    assert not find_valid_plays(b, 'CHKVY', True)
+    b[4][4:5] = ['E', 'T']
+    vps = find_valid_plays(b, 'CHKVY', False)
+    assert ValidPlay(
+        46,
+         ((4, 2, 'K'), (4, 3, 'V'), (4, 6, 'C'), (4, 7, 'H'), (4, 8, 'Y')),
+         ('KVETCHY',)) in vps
+    assert ValidPlay(
+        12,
+         ((3, 4, 'Y'), (5, 4, 'C'), (6, 4, 'H')),
+         ('YECH',)) in vps
+    b = empty_board()
+    b[4][2:6] = ['A', 'H', 'E', 'A', 'D']
+    vps = find_valid_plays(b, 'EORTT', False)
+    assert ValidPlay(
+        43,
+        ((3, 2, 'T'), (3, 3, 'O'), (3, 4, 'R'), (3, 5, 'T'), (3, 6, 'E')),
+        ('ED', 'OH', 'RE', 'TA', 'TA', 'TORTE')) in vps
+    assert ValidPlay(
+        43,
+        ((5, 2, 'T'), (5, 3, 'O'), (5, 4, 'R'), (5, 5, 'T'), (5, 6, 'E')),
+        ('AT', 'AT', 'DE', 'ER', 'HO', 'TORTE')) in vps
 
 # Find and return all exchanges from a given rack.
 # Put the largest exchanges last so that strategies can take advantage of that.
@@ -409,7 +452,7 @@ def exchange(bag, rack, tiles):
     random.shuffle(bag)
 
 def remove_played_tiles(rack, edits):
-    for _, _, _, l in edits:
+    for _, _, l in edits:
         rack.remove(l)
 
 def empty_board():
@@ -506,7 +549,7 @@ def lookahead_1_strat(valid_plays, valid_exchanges, board, rack, unseen,
         next_tiles = random.sample(unseen, min(len(unseen), 10))
         for i in range(len(candidates)):
             edits = candidates[i].edits
-            for rr, cc, _, l in edits:
+            for rr, cc, l in edits:
                 board[rr][cc] = l
             opp_rack = next_tiles[
                 len(edits) : min(len(edits) + RACK_SIZE, len(next_tiles)-1)]
@@ -520,7 +563,7 @@ def lookahead_1_strat(valid_plays, valid_exchanges, board, rack, unseen,
                 opp_valid_plays, opp_valid_exchanges, None, None, None, None)
             if choice == PLAY:
                 opp_scores[i] += details[0]
-            for rr, cc, _, _ in edits:
+            for rr, cc, _ in edits:
                 board[rr][cc] = False
     for i in range(len(candidates)):
         delta = candidates[i].score - (opp_scores[i] / num_trials)
@@ -569,7 +612,7 @@ def sim(strat1, strat2, log=False):
                 sorted(racks[1-active] + bag), len(bag))
         if choice == PLAY:
             score, edits, scored_words = details
-            for rr, cc, _, l in edits:
+            for rr, cc, l in edits:
                 board[rr][cc] = l
             old_rack = racks[active][:]
             remove_played_tiles(racks[active], edits)
@@ -704,9 +747,8 @@ if RUN_TESTS:
     test_find_exchanges()
 
 #compile_leave_data(100000)
-#sim(random_strat, leave_strat, log=True)
-#sim(lookahead_1_strat, greedy_strat, log=True)
-print("RHIH")
+sim(random_strat, leave_strat, log=True)
+sim(lookahead_1_strat, greedy_strat, log=True)
 compare_strats_with_confidence(lookahead_1_strat, greedy_strat, 20, 100)
 """
 for i in range(1, 10):
