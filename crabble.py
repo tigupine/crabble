@@ -1,5 +1,6 @@
 from collections import namedtuple
 import itertools
+import math
 import random
 from string import ascii_uppercase
 
@@ -591,8 +592,7 @@ def leave_strat(valid_plays, valid_exchanges, board, rack, unseen,
     for v in valid_plays:
         r_copy = rack[:]
         remove_played_tiles(r_copy, [t for _, _, t in v.edits])
-        r_copy.sort()
-        adj_score = v.score + m * LEAVES[''.join(r_copy)]
+        adj_score = v.score + m * LEAVES[''.join(sorted(r_copy))]
         if adj_score > best_adj_score:
             best_adj_score = adj_score
             best_choice = PLAY, v
@@ -737,7 +737,7 @@ def sim(strat1, strat2, log=False):
     return scores, record
 
 # Play two strategies against each other for many trials, and report the
-# results.
+# results (and an approximate sense of statistical significance)
 def compare_strats(strat1, strat2, num_trials, log_each_game=False,
                    progress_update_every=100):
     assert num_trials % 2 == 0, "Number of trials must be even"
@@ -768,26 +768,13 @@ def compare_strats(strat1, strat2, num_trials, log_each_game=False,
         "P1 ({}) won {} (avg. score {})\nP2 ({}) won {} (avg.score {})".format(
             strat1.__name__, wins[0], round(score_totals[0] / num_trials, 1),
             strat2.__name__, wins[1], round(score_totals[1] / num_trials, 1)))
+    # Use a normal approximation to the binomial distribution.
+    if wins[0] > wins[1] and num_trials >= 100:
+        print(
+            "Chance of at least this big a positive difference "
+            "for equal strategies: {}".format(
+                math.erfc((wins[0] - num_trials * 0.5)/(0.25*num_trials)**0.5)))
     return wins
-
-# Run a bunch of experiments and report the st. dev. of the means of those.
-# A win rate that is 2+ st. devs. above even is "significant", roughly.
-# TODO: replace this with a binomial-based frequentist probability measure?
-# This is more complicated than it needs to be.
-def compare_strats_with_confidence(
-    strat1, strat2, num_experiments, num_trials_each):
-    s1s = []
-    for i in range(num_experiments):
-        print("Experiment {} of {}".format(i + 1, num_experiments))
-        s1, _ = compare_strats(
-            strat1, strat2, num_trials_each, log_each_game=False,
-            progress_update_every=100)
-        s1s.append(s1)
-    s1mean = sum(s1s) / num_experiments
-    s1stdev = (
-        sum([(x - s1mean)**2 for x in s1s]) / (num_experiments - 1))**0.5
-    print("P1 ({}) mean wins vs P2 ({}): {}, stdev: {}".format(
-        strat1.__name__, strat2.__name__, round(s1mean, 2), round(s1stdev, 2)))
 
 # Infer which leaves are associated with more success on the next two turns.
 def compile_leave_data(num_trials, min_instances=10, log_every=100):
@@ -829,8 +816,7 @@ if RUN_TESTS:
 #compile_leave_data(250000)
 #sim(random_strat, leave_strat, log=True)
 #sim(lookahead_1_strat, greedy_strat, log=True)
-#compare_strats_with_confidence(lookahead_1_strat, greedy_strat, 20, 10)
-for i in range(1, 21):
-    print(i*0.1)
-    compare_strats(leave_strat_m(i*0.1), greedy_strat, 2500,
-                   progress_update_every=100000)
+for i in range(25, 31):
+    print(i*0.01)
+    compare_strats(leave_strat_m(i*0.03), greedy_strat, 2000,
+                   progress_update_every=100)
