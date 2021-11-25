@@ -55,7 +55,7 @@ WORDS = set([l.strip() for l in f.readlines() if len(l) <= BOARD_SIZE + 1])
 
 # Read in data on leaves (for use with some strategies)
 LEAVES = {}
-f = open("adjusted_leaves.txt", "r")
+f = open("leave_values.txt", "r")
 values_total = 0
 for l in f.readlines():
     leave, v = l.strip().split(',')
@@ -63,11 +63,12 @@ for l in f.readlines():
 
 """
 # *** CODE FOR ESTIMATING LEAVES ***
+# Only needs to be run if we generate new / more leaves data.
 
 leave_counts = {}
 leave_totals = {}
-for lname in ("leaves1_250000.txt", "leaves2_150000.txt",
-              "leaves3_250000.txt", "leaves4_100000.txt"):
+for lname in ("leaves1_250000.txt", "leaves2_150000.txt", "leaves3_250000.txt",
+              "leaves4_100000.txt", "leaves5_250000.txt"):
     f = open(lname, "r")
     d = [l.strip().split(',') for l in f.readlines()]
     for leave, total, count in d:
@@ -82,9 +83,67 @@ for k in leave_counts.keys():
         LEAVES[k] = round(leave_totals[k] / leave_counts[k], 1)
 AVERAGE_LEAVE_VALUE = sum(LEAVES.values()) / len(LEAVES)
 
-#s = sorted([(v, k) for k, v in LEAVES.items()])
-#print(s[0:20])
-#print(s[-20:])
+s = sorted([(v, k) for k, v in LEAVES.items()])
+print("25 least valuable leaves:")
+for i in range(25):
+    print("{}: {}".format(s[i][1], s[i][0]))
+print("25 most valuable leaves:")
+for i in range(-25, 0, 1):
+    print("{}: {}".format(s[i][1], s[i][0]))
+
+# 25 least valuable leaves:
+# AGUX: 17.6
+# CFKU: 17.7
+# EPQW: 18.2
+# FHTZ: 18.4
+# LPUZ: 18.9
+# DLQY: 19.0
+# NNSU: 19.2
+# AHOZ: 19.3
+# ITYZ: 19.4
+# GRRV: 19.5
+# KLUX: 19.6
+# LNNQ: 19.6
+# AGPX: 19.8
+# LRRV: 19.8
+# EESU: 19.9
+# EMVX: 19.9
+# LNNV: 20.0
+# LQRR: 20.0
+# LUYZ: 20.0
+# NQRR: 20.2
+# HMVX: 20.3
+# LNRR: 20.3
+# LRRT: 20.3
+# NNVY: 20.3
+# NNRR: 20.4
+# 25 most valuable leaves:
+# FLOS: 47.2
+# NSUY: 47.3
+# E: 47.4
+# FRSS: 47.4
+# HSW: 47.4
+# : 47.5
+# MOYZ: 47.5
+# CHKU: 47.6
+# FIKX: 47.8
+# PRSU: 48.0
+# HOS: 48.1
+# AHS: 48.2
+# A: 48.3
+# AS: 48.3
+# PSS: 48.3
+# AHLZ: 48.7
+# HS: 48.9
+# AAMS: 49.1
+# EFXZ: 49.1
+# ADRS: 49.4
+# DPUY: 49.4
+# DOOS: 49.5
+# CESX: 52.9
+# MSST: 53.4
+# ACRS: 54.1
+# Guessed 1949 of 20644 values.
 
 # Fill in missing leave values.
 def nearby_racks(r):
@@ -104,25 +163,25 @@ def possible_rack(rack):
     return True
 
 # Estimate values
-estimates = []
+estimates = {}
 for n in range(1, RACK_SIZE):
     for r in itertools.product(ascii_uppercase, repeat=n):
         rack = ''.join(sorted(r))
         if not possible_rack(rack):
             continue
-        if rack not in LEAVES:
+        if rack not in LEAVES and rack not in estimates:
             nb = nearby_racks(rack)
             if not nb:
-                estimates.append((rack, AVERAGE_LEAVE_VALUE))
+                estimates[rack] = round(AVERAGE_LEAVE_VALUE,1)
             else:
-                estimates.append(
-                    (rack, round(sum([LEAVES[rr] for rr in nb]) / len(nb), 1)))
-for r, v in estimates:
+                estimates[rack] = round(
+                    sum([LEAVES[rr] for rr in nb]) / len(nb), 1)
+for r, v in estimates.items():
     LEAVES[r] = v
 
-print(LEAVES['JMSX'])
+print("Guessed {} of {} values.".format(len(estimates), len(LEAVES)))
 
-f = open("adjusted_leaves.txt", "w")
+f = open("leave_values.txt", "w")
 for k in sorted(LEAVES.keys()):
     f.write("{},{}\n".format(k, LEAVES[k]))
 """
@@ -585,6 +644,7 @@ def greedy_strat(valid_plays, valid_exchanges, board, rack, unseen,
     return PLAY, valid_plays[0]
 
 # Adjust the score of each potential move based on data from two future moves.
+# The 0.2 parameter comes from experimentation.
 def leave_strat(valid_plays, valid_exchanges, board, rack, unseen,
                 tiles_in_bag, m=0.2):
     best_adj_score = -1000
@@ -771,7 +831,7 @@ def compare_strats(strat1, strat2, num_trials, log_each_game=False,
     # Use a normal approximation to the binomial distribution.
     if wins[0] > wins[1] and num_trials >= 100:
         print(
-            "Chance of at least this big a positive difference "
+            "Prob. of at least this big a positive difference "
             "for equal strategies: {}".format(
                 math.erfc((wins[0] - num_trials * 0.5)/(0.25*num_trials)**0.5)))
     return wins
@@ -814,9 +874,11 @@ if RUN_TESTS:
     test_find_exchanges()
 
 #compile_leave_data(250000)
-#sim(random_strat, leave_strat, log=True)
-#sim(lookahead_1_strat, greedy_strat, log=True)
-for i in range(25, 31):
+sim(random_strat, leave_strat, log=True)
+sim(lookahead_1_strat, greedy_strat, log=True)
+"""
+for i in range(3, 40, 3):
     print(i*0.01)
-    compare_strats(leave_strat_m(i*0.03), greedy_strat, 2000,
+    compare_strats(leave_strat_m(i*0.03), greedy_strat, 100,
                    progress_update_every=100)
+"""
