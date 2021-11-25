@@ -644,9 +644,9 @@ def greedy_strat(valid_plays, valid_exchanges, board, rack, unseen,
     return PLAY, valid_plays[0]
 
 # Adjust the score of each potential move based on data from two future moves.
-# The 0.2 parameter comes from experimentation.
+# The 0.4 parameter comes from experimentation.
 def leave_strat(valid_plays, valid_exchanges, board, rack, unseen,
-                tiles_in_bag, m=0.2):
+                tiles_in_bag, m=0.4):
     best_adj_score = -1000
     best_choice = PASS, None
     for v in valid_plays:
@@ -666,6 +666,29 @@ def leave_strat(valid_plays, valid_exchanges, board, rack, unseen,
     return best_choice
 
 # Like leave_strat, but with an adjustable m parameter.
+# Wins in 10000 games with various values of m:
+"""
+0.05 5127
+0.1 5290
+0.15 5129.5
+0.2 5245
+0.25 5260.5
+0.3 5302
+0.35 5264
+0.4 5329.5
+0.45 5176
+0.5 5165
+0.55 5165.5
+0.6 5132.5
+0.65 5295
+0.7 5170.5
+0.75 5137.5
+0.8 5159
+0.85 5148.5
+0.9 5085
+0.95 5135
+1  5074
+"""
 def leave_strat_m(m):
     return (lambda valid_plays, valid_exchanges, board, rack, unseen,
             tiles_in_bag : leave_strat(
@@ -797,7 +820,8 @@ def sim(strat1, strat2, log=False):
     return scores, record
 
 # Play two strategies against each other for many trials, and report the
-# results (and an approximate sense of statistical significance)
+# results (and an approximate sense of statistical significance).
+# Alternate who goes first, because 
 def compare_strats(strat1, strat2, num_trials, log_each_game=False,
                    progress_update_every=100):
     assert num_trials % 2 == 0, "Number of trials must be even"
@@ -874,11 +898,9 @@ if RUN_TESTS:
     test_find_exchanges()
 
 #compile_leave_data(250000)
-sim(random_strat, leave_strat, log=True)
-sim(lookahead_1_strat, greedy_strat, log=True)
-"""
-for i in range(3, 40, 3):
+#sim(random_strat, leave_strat, log=True)
+#sim(lookahead_1_strat, greedy_strat, log=True)
+for i in range(25, 45, 2):
     print(i*0.01)
-    compare_strats(leave_strat_m(i*0.03), greedy_strat, 100,
-                   progress_update_every=100)
-"""
+    compare_strats(greedy_strat, leave_strat_m(i*0.01), 5000,
+                   progress_update_every=1000)
