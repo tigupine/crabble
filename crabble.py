@@ -62,7 +62,7 @@ for l in f.readlines():
     LEAVES[leave] = float(v)
 
 """
-# *** CODE FOR ESTIMATING LEAVES ***
+# *** BEGIN CODE FOR ESTIMATING LEAVES ***
 # Only needs to be run if we generate new / more leaves data.
 
 leave_counts = {}
@@ -179,11 +179,91 @@ for n in range(1, RACK_SIZE):
 for r, v in estimates.items():
     LEAVES[r] = v
 
-print("Guessed {} of {} values.".format(len(estimates), len(LEAVES)))
+print("Guessed {} of {} leave values.".format(len(estimates), len(LEAVES)))
 
 f = open("leave_values.txt", "w")
 for k in sorted(LEAVES.keys()):
     f.write("{},{}\n".format(k, LEAVES[k]))
+*** END CODE FOR ESTIMATING LEAVES ***
+"""
+
+# Read in data on defense values (for use with some strategies)
+DEFENSE_PER_CELL = eval(
+    open("defense_per_cell_values.txt", "r").readline().strip())
+DEFENSE_PER_PLAY = {}
+f = open("defense_per_play_values.txt", "r")
+for l in f.readlines():
+    p, v = l.strip().split('\t')
+    DEFENSE_PER_PLAY[eval(p)] = float(v)
+
+"""
+# *** BEGIN CODE FOR ESTIMATING DEFENSE VALUES ***
+# Only needs to be run if we generate new / more leaves data.
+
+def empty_board_stats():
+    return [[0 for _ in range(BOARD_SIZE)] for __ in range(BOARD_SIZE)]
+
+per_cell_counts = empty_board_stats()
+per_cell_totals = empty_board_stats()
+per_play_counts = {}
+per_play_totals = {}
+for cname, pname in (("defense_per_cell_1_1000.txt",
+                      "defense_per_play_1_1000.txt"),):
+    cf = open(cname, "r")
+    cd_totals = eval(cf.readline().strip())
+    cd_counts = eval(cf.readline().strip())
+    for r in range(BOARD_SIZE):
+        for c in range(BOARD_SIZE):
+            per_cell_counts[r][c] = cd_counts[r][c]
+            per_cell_totals[r][c] = cd_totals[r][c]
+    pf = open(pname, "r")
+    for play, total, count in [l.strip().split('\t') for l in pf.readlines()]:
+        play = eval(play)
+        if play not in per_play_counts:
+            per_play_counts[play] = 0
+            per_play_totals[play] = 0
+        per_play_counts[play] += int(count)
+        per_play_totals[play] += int(total)
+
+DEFENSE_PER_CELL = empty_board_stats()
+for r in range(BOARD_SIZE):
+    for c in range(BOARD_SIZE):
+        DEFENSE_PER_CELL[r][c] = round(
+            per_cell_totals[r][c] / per_cell_counts[r][c], 2)
+f = open("defense_per_cell_values.txt", "w")
+f.write("{}\n".format(DEFENSE_PER_CELL))
+
+DEFENSE_PER_PLAY = {}
+for k, v in per_play_counts.items():
+    if v >= 10: # make sure data is representative-ish
+        DEFENSE_PER_PLAY[k] = round(per_play_totals[k] / v, 2)
+
+def possible_plays():
+    plays = set()
+    for lane in range(BOARD_SIZE):
+        for n in range(1, RACK_SIZE+1):
+            for comb in itertools.combinations(range(BOARD_SIZE), n):
+                across_play = tuple([(lane, k) for k in comb])
+                plays.add(across_play)
+                down_play = tuple([(k, lane) for k in comb])
+                plays.add(down_play)
+    return plays
+
+# Estimate missing values.
+estimated = 0
+for p in possible_plays():
+    if p not in DEFENSE_PER_PLAY:
+        estimated += 1
+        DEFENSE_PER_PLAY[p] = round(sum(
+            [DEFENSE_PER_CELL[r][c] for r, c in p]) / len(p), 2)
+                
+print("Guessed {} of {} defense values.".format(
+    estimated, len(DEFENSE_PER_PLAY)))
+
+f = open("defense_per_play_values.txt", "w")
+for k in sorted(DEFENSE_PER_PLAY.keys()):
+    f.write("{}\t{}\n".format(k, DEFENSE_PER_PLAY[k]))
+# *** END CODE FOR ESTIMATING DEFENSE VALUES ***
 """
 
 # Check the validity of / calculate the score of the new word (if any) formed
@@ -666,29 +746,19 @@ def leave_strat(valid_plays, valid_exchanges, board, rack, unseen,
     return best_choice
 
 # Like leave_strat, but with an adjustable m parameter.
-# Wins in 10000 games with various values of m:
+# Wins in 10000 games with various values of m
 """
-0.05 5127
-0.1 5290
-0.15 5129.5
-0.2 5245
-0.25 5260.5
-0.3 5302
-0.35 5264
-0.4 5329.5
-0.45 5176
-0.5 5165
-0.55 5165.5
-0.6 5132.5
-0.65 5295
-0.7 5170.5
-0.75 5137.5
-0.8 5159
-0.85 5148.5
-0.9 5085
-0.95 5135
-1  5074
+0.05 5127.0, 0.1 5290.0, 0.15 5129.5, 0.2 5245.0, 0.25 5260.5, 0.3 5302.0,
+0.35 5264.0, 0.4 5329.5, 0.45 5176.0, 0.5 5165.0, 0.55 5165.5, 0.6 5132.5,
+0.65 5295.0, 0.7 5170.5, 0.75 5137.5, 0.8 5159.0, 0.85 5148.5, 0.9 5085.0,
+0.95 5135.0, 1.0 5074.0
 """
+# Data from 5000 games in a smaller range
+"""
+0.25 2621.0, 0.27 2618.0, 0.29 2629.0, 0.31 2610.5, 0.33 2571.0,
+0.35 2599.5, 0.37 2576.5, 0.39 2601.5, 0.41 2661.0, 0.43 2568.0
+"""
+
 def leave_strat_m(m):
     return (lambda valid_plays, valid_exchanges, board, rack, unseen,
             tiles_in_bag : leave_strat(
@@ -784,7 +854,7 @@ def sim(strat1, strat2, log=False):
             scoreline = "rack {}, played r{}c{} {}  score {}".format(
                 rep_rack(old_rack), edits[0][0]+1, edits[0][1]+1,
                 rep_words(scored_words), score)
-            record[active].append((PLAY, score, rep_rack(racks[active])))
+            record[active].append((PLAY, score, edits, rep_rack(racks[active])))
             draw(bag, racks[active])
             wordless_turns = 0
         elif choice == EXCHANGE:
@@ -794,11 +864,11 @@ def sim(strat1, strat2, log=False):
             exchange(bag, racks[active], details)
             scoreline = "rack {}, exchanged {}, redrew to {}".format(
                 rep_rack(oldrack), details, rep_rack(racks[active]))
-            record[active].append((EXCHANGE, 0, rep_rack(racks[active])))
+            record[active].append((EXCHANGE, 0, None, rep_rack(racks[active])))
         else: # PASS
             wordless_turns += 1
             scoreline = "rack {}, passed".format(rep_rack(racks[active]))
-            record[active].append((PASS, 0, rep_rack(racks[active])))
+            record[active].append((PASS, 0, None, rep_rack(racks[active])))
         if log:
             print("{}-{}   P{} {}".format(
                 scores[0], scores[1], active+1, scoreline))
@@ -861,7 +931,7 @@ def compare_strats(strat1, strat2, num_trials, log_each_game=False,
     return wins
 
 # Infer which leaves are associated with more success on the next two turns.
-def compile_leave_data(num_trials, min_instances=10, log_every=100):
+def compile_leave_data(num_trials, log_every=100):
     per_leave_data = {}
     for t in range(num_trials):
         if t % log_every == 0:
@@ -869,23 +939,59 @@ def compile_leave_data(num_trials, min_instances=10, log_every=100):
         _, record = sim(greedy_strat, greedy_strat, log=False)
         for i in range(2):
             for j in range(len(record[i])-2):
-                _, _, rack = record[i][j]
-                if len(rack) == RACK_SIZE:
+                _, _, _, leave = record[i][j]
+                if len(leave) == RACK_SIZE:
                     continue
-                move_1, score_1, _ = record[i][j+1]
-                move_2, score_2, _ = record[i][j+2]
+                move_1, score_1, _, _ = record[i][j+1]
+                move_2, score_2, _, _ = record[i][j+2]
                 # Don't bias too heavily toward the endgame.
                 if move_1 != PLAY and move_2 != PLAY:
                     continue
                 score = score_1 + score_2
-                if rack not in per_leave_data:
-                    per_leave_data[rack] = [0, 0]
-                per_leave_data[rack][0] += score
-                per_leave_data[rack][1] += 1
+                if leave not in per_leave_data:
+                    per_leave_data[leave] = [0, 0]
+                per_leave_data[leave][0] += score
+                per_leave_data[leave][1] += 1
     f = open("leaves.txt", "w")
     for k, v in sorted(per_leave_data.items()):
         total, instances = v
         f.write("{},{},{}\n".format(k, total, instances))
+
+# Infer which play positions and board squares are associated with higher
+# opponent scores in response.
+def compile_defense_data(num_trials, log_every=100):
+    per_cell_counts = [[0 for _ in range(BOARD_SIZE)]
+                       for _ in range(BOARD_SIZE)]
+    per_cell_totals = [[0 for _ in range(BOARD_SIZE)]
+                       for _ in range(BOARD_SIZE)]
+    per_play_data = {}
+    for t in range(num_trials):
+        if t % log_every == 0:
+            print(t)
+        _, record = sim(greedy_strat, greedy_strat, log=False)
+        for i in range(2):
+            for j in range(len(record[i])):
+                opp_next_move_index = j + i
+                if opp_next_move_index > len(record[1-i]) - 1:
+                    continue
+                move, _, edits, _ = record[i][j]
+                if move != PLAY:
+                    continue
+                _, opp_score, _, _ = record[1-i][opp_next_move_index]
+                edit_positions = tuple([(r, c) for r, c, _ in edits])
+                for r, c in edit_positions:
+                    per_cell_counts[r][c] += 1
+                    per_cell_totals[r][c] += opp_score
+                if edit_positions not in per_play_data:
+                    per_play_data[edit_positions] = [0, 0]
+                per_play_data[edit_positions][0] += opp_score
+                per_play_data[edit_positions][1] += 1
+    f = open("defense_per_cell.txt", "w")
+    f.write("{}\n{}".format(per_cell_totals, per_cell_counts))
+    f = open("defense_per_play.txt", "w")
+    for k, v in sorted(per_play_data.items()):
+        total, instances = v
+        f.write("{}\t{}\t{}\n".format(k, total, instances))
 
 ### BEGIN MAIN BODY ###
 
@@ -897,10 +1003,13 @@ if RUN_TESTS:
     test_find_valid_plays()
     test_find_exchanges()
 
+#compile_defense_data(100000)
 #compile_leave_data(250000)
-#sim(random_strat, leave_strat, log=True)
+sim(random_strat, leave_strat, log=True)
 #sim(lookahead_1_strat, greedy_strat, log=True)
+"""
 for i in range(25, 45, 2):
     print(i*0.01)
     compare_strats(greedy_strat, leave_strat_m(i*0.01), 5000,
                    progress_update_every=1000)
+"""
