@@ -765,6 +765,29 @@ def leave_strat_m(m):
                 valid_plays, valid_exchanges, board, rack, unseen,
                 tiles_in_bag, m=m))
 
+def defense_strat(valid_plays, valid_exchanges, board, rack, unseen,
+                tiles_in_bag, m=0.4):
+    best_adj_score = -1000
+    best_play = None
+    for v in valid_plays:
+        played_locations = tuple([(r, c) for r, c, _ in v.edits])
+        # These values represent risk / opponent score, so subtract them.
+        adj_score = v.score + m - DEFENSE_PER_PLAY[played_locations]
+        if adj_score > best_adj_score:
+            best_adj_score = adj_score
+            best_play = v
+    if best_play:
+        return PLAY, best_play
+    if valid_exchanges:
+        return EXCHANGE, sorted(list(valid_exchanges))[-1] # one of biggest
+    return PASS, None
+
+def defense_strat_m(m):
+    return (lambda valid_plays, valid_exchanges, board, rack, unseen,
+            tiles_in_bag : defense_strat(
+                valid_plays, valid_exchanges, board, rack, unseen,
+                tiles_in_bag, m=m))
+
 # Assume a greedy opponent, see what they might do next turn in response, and
 # decide accordingly.
 def lookahead_1_strat(valid_plays, valid_exchanges, board, rack, unseen,
@@ -1005,11 +1028,9 @@ if RUN_TESTS:
 
 #compile_defense_data(100000)
 #compile_leave_data(250000)
-sim(random_strat, leave_strat, log=True)
+#sim(random_strat, leave_strat, log=True)
 #sim(lookahead_1_strat, greedy_strat, log=True)
-"""
-for i in range(25, 45, 2):
+for i in range(-50, 100, 10):
     print(i*0.01)
-    compare_strats(greedy_strat, leave_strat_m(i*0.01), 5000,
+    compare_strats(defense_strat_m(i*0.01), greedy_strat, 1000,
                    progress_update_every=1000)
-"""
