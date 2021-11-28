@@ -207,7 +207,8 @@ per_cell_counts = empty_board_stats()
 per_cell_totals = empty_board_stats()
 per_play_counts = {}
 per_play_totals = {}
-for filenum, ct in ((1, 100000), (2, 100000), (3, 200000), (4, 250000), (5, 200000), (6, 300000)):
+for filenum, ct in ((1, 100000), (2, 100000), (3, 200000), (4, 250000),
+                    (5, 200000), (6, 300000), (7, 200000)):
     cf = open("defense_per_cell_{}_{}.txt".format(filenum, ct), "r")
     cd_totals = eval(cf.readline().strip())
     cd_counts = eval(cf.readline().strip())
