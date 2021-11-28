@@ -800,6 +800,10 @@ def leave_strat_m(m):
 
 def defense_strat(valid_plays, valid_exchanges, board, rack, unseen,
                 tiles_in_bag, m=0.1, tile_threshold=20):
+    # This strategy is likely to become less reliable later in the game, since
+    # the board layouts get more and more specific and so the general data fits
+    # less well. So, cut off the strategy once the game progresses past a
+    # certain point.
     if tiles_in_bag < tile_threshold:
         return greedy_strat(valid_plays, valid_exchanges, board, rack,
                             unseen, tiles_in_bag)
@@ -819,21 +823,37 @@ def defense_strat(valid_plays, valid_exchanges, board, rack, unseen,
     return PASS, None
 
 # Preliminary results (from 1000-game sets) suggest that this strategy isn't so
-# great :( (These are probably super noisy though)
+# great :( (These are super noisy though)
 # Win percentages:
-#         t = 10    15    20    25    30
-#    -0.1     480   514   506.5 512   482.5 
-#    -0.05    494   485   495   483   469
-#     0       491   491   470.5 478   507.5
-#     0.05    514.5 470.5 521.5 490   499.5
-# m = 0.1     500.5 499.5 507.5 475.5 490.5
-#     0.15    509   486.5 511.5 528.5 480.5
-#     0.2     500   489.5 494   523.5 477
-#     0.25    506.5 471   501.5 497.5 512.5
-#     0.3     513.5 490.5 504   485.5 491
-#     0.35    476   497   470   496   479.5
-#     0.4     485.5 520   503   477   511
-#     0.45    501.5 515   522.5 478   513.5
+# m=   t = 10    15    20    25
+# --------------------------------
+# -0.1     480   514   506.5 512
+# -0.05    494   485   495   483
+#  0.0     491   491   470.5 478 <-- note the noise, these should be even
+#  0.05    514.5 470.5 521.5 490 <-- 521.5 disappears with 10000 runs :(
+#  0.1     500.5 499.5 507.5 475.5
+#  0.15    509   486.5 511.5 528.5 <- 528.5 disappears with 10000 runs :(
+#  0.2     500   489.5 494   523.5
+#  0.25    506.5 471   501.5 497.5
+#  0.3     513.5 490.5 504   485.5
+#  0.35    476   497   470   496
+#  0.4     485.5 520   503   477
+#  0.45    501.5 515   522.5 478
+#  0.5     487   467   519   510.5
+#  0.55    495   496.5 484.5 483
+#  0.6     483   491   499   508.5
+#  0.65    469.5 495   512   498
+#  0.7     483.5 493.5 508.5 504
+#  0.75    471.5 515.5 516.5 472.5
+#  0.8     471   489   472.5 496.5
+#  0.85    459   448.5 473   524
+#  0.9     431   487.5 504   481
+#  0.95    407   453   480   518
+#  1       427   457   475   496
+#  1.05    401.5 453   465   510.5
+#  1.1     394.5 441   481   512.5
+#  1.15    411   436.5 455   487.5
+
 
 def defense_strat_mt(m, t):
     return (lambda valid_plays, valid_exchanges, board, rack, unseen,
@@ -1082,9 +1102,12 @@ if RUN_TESTS:
 #compile_defense_data(300000)
 #compile_leave_data(250000)
 #sim(random_strat, leave_strat, log=True)
-#sim(lookahead_1_start, greedy_strat, log=True)
+#sim(defense_strat, greedy_strat, log=True)
+#compare_strats(defense_strat_mt(0.15, 25), greedy_strat, 10000)
+"""
 for t in range(10, 35, 5):
     for i in range(50, 120, 5):
         print(t, i*0.01)
         compare_strats(defense_strat_mt(i*0.01, t), greedy_strat, 1000,
                        progress_update_every=1000)
+"""
