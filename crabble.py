@@ -217,8 +217,8 @@ for filenum, ct in ((8, 1000),):
     for v in range(2):
         for r in range(BOARD_SIZE):
             for c in range(BOARD_SIZE):
-                per_cell_counts[v][r][c] = cd_counts[v][r][c]
-                per_cell_totals[v][r][c] = cd_totals[v][r][c]
+                per_cell_counts[v][r][c] += cd_counts[v][r][c]
+                per_cell_totals[v][r][c] += cd_totals[v][r][c]
     pf = open("defense_per_play_{}_{}.txt".format(filenum, ct), "r")
     for play, total, count in [l.strip().split('\t') for l in pf.readlines()]:
         play = eval(play)
@@ -1085,8 +1085,7 @@ if RUN_TESTS:
     test_find_valid_plays()
     test_find_exchanges()
 
-#compile_leave_and_defense_data(1000)
-#compile_leave_data(250000)
+compile_leave_and_defense_data(250000)
 #sim(random_strat, leave_strat, log=True)
 #sim(defense_strat, greedy_strat, log=True)
 #compare_strats(defense_strat_mt(0.15, 25), greedy_strat, 10000)
