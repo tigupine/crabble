@@ -5,6 +5,8 @@ import random
 from string import ascii_uppercase
 
 RUN_TESTS = True
+RECOMPUTE_LEAVES = True
+RECOMPUTE_DEFENSE = True
 
 RACK_SIZE = 5
 # The layout of "premium" tiles on the board.
@@ -53,257 +55,151 @@ ValidPlay = namedtuple(
 f = open("words.txt", "r")
 WORDS = set([l.strip() for l in f.readlines() if len(l) <= BOARD_SIZE + 1])
 
-# Read in data on leaves (for use with some strategies)
-LEAVES = {}
-f = open("leave_values.txt", "r")
-values_total = 0
-for l in f.readlines():
-    leave, v = l.strip().split(',')
-    LEAVES[leave] = float(v)
-
 VOWELS = 'AEIOU'
-
-"""
-# *** BEGIN CODE FOR ESTIMATING LEAVES ***
-# Only needs to be run if we generate new / more leaves data.
-
-leave_counts = {}
-leave_totals = {}
-for lname in ("leaves1_250000.txt", "leaves2_150000.txt", "leaves3_250000.txt",
-              "leaves4_100000.txt", "leaves5_250000.txt"):
-    f = open(lname, "r")
-    d = [l.strip().split(',') for l in f.readlines()]
-    for leave, total, count in d:
-        if leave not in leave_counts:
-            leave_counts[leave] = 0
-            leave_totals[leave] = 0  
-        leave_counts[leave] += int(count)
-        leave_totals[leave] += int(total)
 LEAVES = {}
-for k in leave_counts.keys():
-    if leave_counts[k] >= 10: # make sure data is representative-ish
-        LEAVES[k] = round(leave_totals[k] / leave_counts[k], 1)
-AVERAGE_LEAVE_VALUE = sum(LEAVES.values()) / len(LEAVES)
 
-s = sorted([(v, k) for k, v in LEAVES.items()])
-print("25 least valuable leaves:")
-for i in range(25):
-    print("{}: {}".format(s[i][1], s[i][0]))
-print("25 most valuable leaves:")
-for i in range(-25, 0, 1):
-    print("{}: {}".format(s[i][1], s[i][0]))
+if not RECOMPUTE_LEAVES:
+    f = open("leave_values.txt", "r")
+    values_total = 0
+    for l in f.readlines():
+        leave, v = l.strip().split(',')
+        LEAVES[leave] = float(v)
+else:
+    leave_counts = {}
+    leave_totals = {}
+    for filenum, ct in ((1, 250000), (2, 150000), (3, 250000), (4, 100000),
+                        (5, 250000), (8, 250000), (9, 150000), (10, 250000)):
+        f = open("leaves_{}_{}.txt".format(filenum, ct), "r")
+        d = [l.strip().split(',') for l in f.readlines()]
+        for leave, total, count in d:
+            if leave not in leave_counts:
+                leave_counts[leave] = 0
+                leave_totals[leave] = 0  
+            leave_counts[leave] += int(count)
+            leave_totals[leave] += int(total)
+    for k in leave_counts.keys():
+        if leave_counts[k] >= 10: # make sure data is representative-ish
+            LEAVES[k] = round(leave_totals[k] / leave_counts[k], 1)
+    AVERAGE_LEAVE_VALUE = sum(LEAVES.values()) / len(LEAVES)
 
-# 25 least valuable leaves:
-# AGUX: 17.6
-# CFKU: 17.7
-# EPQW: 18.2
-# FHTZ: 18.4
-# LPUZ: 18.9
-# DLQY: 19.0
-# NNSU: 19.2
-# AHOZ: 19.3
-# ITYZ: 19.4
-# GRRV: 19.5
-# KLUX: 19.6
-# LNNQ: 19.6
-# AGPX: 19.8
-# LRRV: 19.8
-# EESU: 19.9
-# EMVX: 19.9
-# LNNV: 20.0
-# LQRR: 20.0
-# LUYZ: 20.0
-# NQRR: 20.2
-# HMVX: 20.3
-# LNRR: 20.3
-# LRRT: 20.3
-# NNVY: 20.3
-# NNRR: 20.4
-# 25 most valuable leaves:
-# FLOS: 47.2
-# NSUY: 47.3
-# E: 47.4
-# FRSS: 47.4
-# HSW: 47.4
-# : 47.5
-# MOYZ: 47.5
-# CHKU: 47.6
-# FIKX: 47.8
-# PRSU: 48.0
-# HOS: 48.1
-# AHS: 48.2
-# A: 48.3
-# AS: 48.3
-# PSS: 48.3
-# AHLZ: 48.7
-# HS: 48.9
-# AAMS: 49.1
-# EFXZ: 49.1
-# ADRS: 49.4
-# DPUY: 49.4
-# DOOS: 49.5
-# CESX: 52.9
-# MSST: 53.4
-# ACRS: 54.1
-# Guessed 1949 of 20644 values.
+    s = sorted([(v, k) for k, v in LEAVES.items()])
+    print("25 least valuable leaves:")
+    for i in range(25):
+        print("{}: {}".format(s[i][1], s[i][0]))
+    print("25 most valuable leaves:")
+    for i in range(-25, 0, 1):
+        print("{}: {}".format(s[i][1], s[i][0]))
+    def nearby_racks(r):
+        nearby = []
+        for index in range(len(r)):
+            for letter in ascii_uppercase:
+                new_r = ''.join(sorted(r[0:index] + letter + r[index+1:]))
+                if new_r in LEAVES:
+                    nearby.append(new_r)
+        return nearby
+    def possible_rack(rack):
+        letters = set([l for l in rack])
+        for l in letters:
+            if rack.count(l) > FREQS[l]:
+                return False
+        return True
+    # Fill in missing leave values.
+    estimates = {}
+    for n in range(1, RACK_SIZE):
+        for r in itertools.product(ascii_uppercase, repeat=n):
+            rack = ''.join(sorted(r))
+            if not possible_rack(rack):
+                continue
+            if rack not in LEAVES and rack not in estimates:
+                nb = nearby_racks(rack)
+                if not nb:
+                    estimates[rack] = round(AVERAGE_LEAVE_VALUE,1)
+                else:
+                    estimates[rack] = round(
+                        sum([LEAVES[rr] for rr in nb]) / len(nb), 1)
+    for r, v in estimates.items():
+        LEAVES[r] = v
+    print("Guessed {} of {} leave values.".format(len(estimates), len(LEAVES)))
+    f = open("leave_values.txt", "w")
+    for k in sorted(LEAVES.keys()):
+        f.write("{},{}\n".format(k, LEAVES[k]))
 
-# Fill in missing leave values.
-def nearby_racks(r):
-    nearby = []
-    for index in range(len(r)):
-        for letter in ascii_uppercase:
-            new_r = ''.join(sorted(r[0:index] + letter + r[index+1:]))
-            if new_r in LEAVES:
-                nearby.append(new_r)
-    return nearby
-
-def possible_rack(rack):
-    letters = set([l for l in rack])
-    for l in letters:
-        if rack.count(l) > FREQS[l]:
-            return False
-    return True
-
-# Estimate values
-estimates = {}
-for n in range(1, RACK_SIZE):
-    for r in itertools.product(ascii_uppercase, repeat=n):
-        rack = ''.join(sorted(r))
-        if not possible_rack(rack):
-            continue
-        if rack not in LEAVES and rack not in estimates:
-            nb = nearby_racks(rack)
-            if not nb:
-                estimates[rack] = round(AVERAGE_LEAVE_VALUE,1)
-            else:
-                estimates[rack] = round(
-                    sum([LEAVES[rr] for rr in nb]) / len(nb), 1)
-for r, v in estimates.items():
-    LEAVES[r] = v
-
-print("Guessed {} of {} leave values.".format(len(estimates), len(LEAVES)))
-
-f = open("leave_values.txt", "w")
-for k in sorted(LEAVES.keys()):
-    f.write("{},{}\n".format(k, LEAVES[k]))
-*** END CODE FOR ESTIMATING LEAVES ***
-"""
-
-# Read in data on defense values (for use with some strategies)
-DEFENSE_PER_CELL = eval(
-    open("defense_per_cell_values.txt", "r").readline().strip())
+DEFENSE_PER_CELL = {}
 DEFENSE_PER_PLAY = {}
-f = open("defense_per_play_values.txt", "r")
-for l in f.readlines():
-    p, v = l.strip().split('\t')
-    DEFENSE_PER_PLAY[eval(p)] = float(v)
-
 def empty_defense_stats():
     return [[[0 for _ in range(BOARD_SIZE)] for __ in range(BOARD_SIZE)]
             for __ in range(2)]
 
-"""
-# *** BEGIN CODE FOR ESTIMATING DEFENSE VALUES ***
-# Only needs to be run if we generate new / more leaves data.
-
-per_cell_counts = empty_defense_stats()
-per_cell_totals = empty_defense_stats()
-per_play_counts = {}
-per_play_totals = {}
-for filenum, ct in ((8, 1000),):
-    cf = open("defense_per_cell_{}_{}.txt".format(filenum, ct), "r")
-    cd_totals = eval(cf.readline().strip())
-    cd_counts = eval(cf.readline().strip())
+if not RECOMPUTE_DEFENSE:
+    DEFENSE_PER_CELL = eval(
+        open("defense_per_cell_values.txt", "r").readline().strip())
+    f = open("defense_per_play_values.txt", "r")
+    for l in f.readlines():
+        p, v = l.strip().split('\t')
+        DEFENSE_PER_PLAY[eval(p)] = float(v)
+else:
+    per_cell_counts = empty_defense_stats()
+    per_cell_totals = empty_defense_stats()
+    per_play_counts = {}
+    per_play_totals = {}
+    for filenum, ct in ((8, 250000), (9, 150000), (10, 250000),):
+        cf = open("defense_per_cell_{}_{}.txt".format(filenum, ct), "r")
+        cd_totals = eval(cf.readline().strip())
+        cd_counts = eval(cf.readline().strip())
+        for v in range(2):
+            for r in range(BOARD_SIZE):
+                for c in range(BOARD_SIZE):
+                    per_cell_counts[v][r][c] += cd_counts[v][r][c]
+                    per_cell_totals[v][r][c] += cd_totals[v][r][c]
+        pf = open("defense_per_play_{}_{}.txt".format(filenum, ct), "r")
+        for play, total, count in [l.strip().split('\t') for l in pf.readlines()]:
+            play = eval(play)
+            if play not in per_play_counts:
+                per_play_counts[play] = 0
+                per_play_totals[play] = 0
+            per_play_counts[play] += int(count)
+            per_play_totals[play] += int(total)
+    DEFENSE_PER_CELL = empty_defense_stats()
     for v in range(2):
         for r in range(BOARD_SIZE):
             for c in range(BOARD_SIZE):
-                per_cell_counts[v][r][c] += cd_counts[v][r][c]
-                per_cell_totals[v][r][c] += cd_totals[v][r][c]
-    pf = open("defense_per_play_{}_{}.txt".format(filenum, ct), "r")
-    for play, total, count in [l.strip().split('\t') for l in pf.readlines()]:
-        play = eval(play)
-        if play not in per_play_counts:
-            per_play_counts[play] = 0
-            per_play_totals[play] = 0
-        per_play_counts[play] += int(count)
-        per_play_totals[play] += int(total)
-
-DEFENSE_PER_CELL = empty_defense_stats()
-for v in range(2):
-    for r in range(BOARD_SIZE):
-        for c in range(BOARD_SIZE):
-            DEFENSE_PER_CELL[v][r][c] = round(
-                per_cell_totals[v][r][c] / per_cell_counts[v][r][c], 2)
-f = open("defense_per_cell_values.txt", "w")
-f.write("{}\n".format(DEFENSE_PER_CELL))
-
-DEFENSE_PER_PLAY = {}
-for k, v in per_play_counts.items():
-    if v >= 10: # make sure data is representative-ish
-        DEFENSE_PER_PLAY[k] = round(per_play_totals[k] / v, 2)
-
-def possible_plays():
-    plays = set()
-    for lane in range(BOARD_SIZE):
-        for n in range(1, RACK_SIZE+1):
-            for comb in itertools.combinations(range(BOARD_SIZE), n):
-                for v in itertools.product(range(2), repeat=n):
-                    across_play = tuple([(v[i], lane, comb[i]) for i in range(n)])
-                    plays.add(across_play)
-                    down_play = tuple([(v[i], comb[i], lane) for i in range(n)])
-                    plays.add(down_play)
-    return plays
-
-# Estimate missing values.
-estimated = 0
-for p in possible_plays():
-    if p not in DEFENSE_PER_PLAY:
-        estimated += 1
-        DEFENSE_PER_PLAY[p] = round(sum(
-            [DEFENSE_PER_CELL[v][r][c] for v, r, c in p]) / len(p), 2)
-                
-print("Guessed {} of {} defense values.".format(
-    estimated, len(DEFENSE_PER_PLAY)))
-
-s = sorted([(v, k) for k, v in DEFENSE_PER_PLAY.items()])
-print("25 least risky plays:")
-for i in range(25):
-    print("{}: {}".format(s[i][1], s[i][0]))
-print("25 riskiest plays")
-for i in range(-25, 0, 1):
-    print("{}: {}".format(s[i][1], s[i][0]))
-
-# ((5, 1), (5, 2), (5, 3), (5, 5), (5, 6)): 28.65
-# ((3, 1), (3, 2), (3, 3), (3, 4), (3, 7)): 28.7
-# ((6, 1), (6, 5), (6, 6), (6, 7), (6, 8)): 28.7
-# ((1, 0), (2, 0), (3, 0), (6, 0), (7, 0)): 28.73
-# ((1, 5), (2, 5), (3, 5), (4, 5), (5, 5)): 28.83
-# ((1, 3), (2, 3), (3, 3), (4, 3), (5, 3)): 28.87
-# ((5, 1), (5, 2), (5, 3), (5, 7), (5, 8)): 29.0
-# ((6, 0), (6, 1), (6, 5), (6, 6), (6, 7)): 29.0
-# ((2, 8), (3, 8), (4, 8), (6, 8), (8, 8)): 29.13
-# ((7, 1), (7, 2), (7, 4), (7, 5), (7, 6)): 29.2
-# ((1, 3), (2, 3), (3, 3), (5, 3), (6, 3)): 29.21
-# ((7, 2), (7, 5), (7, 6), (7, 7), (7, 8)): 29.21
-# ((1, 5), (2, 5), (3, 5), (5, 5), (6, 5)): 29.28
-# ((0, 4), (1, 4), (2, 4), (3, 4), (8, 4)): 29.35
-# ((6, 0), (6, 1), (6, 3), (6, 5), (6, 6)): 29.4
-# ((1, 3), (2, 3), (3, 3), (6, 3), (7, 3)): 29.55
-# ((7, 1), (7, 2), (7, 3), (7, 5), (7, 6)): 29.61
-# ((0, 4), (1, 4), (2, 4), (3, 4), (7, 4)): 29.67
-# ((6, 3), (6, 4), (6, 6), (6, 7), (6, 8)): 29.75
-# ((5, 0), (5, 1), (5, 2), (5, 3), (5, 7)): 29.87
-# ((1, 3), (2, 3), (3, 3), (4, 3), (6, 3)): 30.36
-# ((7, 0), (7, 6), (7, 7)): 31.5
-# ((7, 0), (7, 1), (7, 5), (7, 6)): 31.58
-# ((1, 5), (2, 5), (5, 5), (6, 5)): 32.41
-# ((4, 0), (4, 1), (4, 3), (4, 5), (4, 6)): 33.0
-
-f = open("defense_per_play_values.txt", "w")
-for k in sorted(DEFENSE_PER_PLAY.keys()):
-    f.write("{}\t{}\n".format(k, DEFENSE_PER_PLAY[k]))
-# *** END CODE FOR ESTIMATING DEFENSE VALUES ***
-"""
+                DEFENSE_PER_CELL[v][r][c] = round(
+                    per_cell_totals[v][r][c] / per_cell_counts[v][r][c], 2)
+    f = open("defense_per_cell_values.txt", "w")
+    f.write("{}\n".format(DEFENSE_PER_CELL))
+    for k, v in per_play_counts.items():
+        if v >= 10: # make sure data is representative-ish
+            DEFENSE_PER_PLAY[k] = round(per_play_totals[k] / v, 2)
+    def possible_plays():
+        plays = set()
+        for lane in range(BOARD_SIZE):
+            for n in range(1, RACK_SIZE+1):
+                for comb in itertools.combinations(range(BOARD_SIZE), n):
+                    for v in itertools.product(range(2), repeat=n):
+                        across_play = tuple([(v[i], lane, comb[i]) for i in range(n)])
+                        plays.add(across_play)
+                        down_play = tuple([(v[i], comb[i], lane) for i in range(n)])
+                        plays.add(down_play)
+        return plays
+    # Estimate missing values.
+    estimated = 0
+    for p in possible_plays():
+        if p not in DEFENSE_PER_PLAY:
+            estimated += 1
+            DEFENSE_PER_PLAY[p] = round(sum(
+                [DEFENSE_PER_CELL[v][r][c] for v, r, c in p]) / len(p), 2)       
+    print("Guessed {} of {} defense values.".format(
+        estimated, len(DEFENSE_PER_PLAY)))
+    s = sorted([(v, k) for k, v in DEFENSE_PER_PLAY.items()])
+    print("25 least risky plays:")
+    for i in range(25):
+        print("{}: {}".format(s[i][1], s[i][0]))
+    print("25 riskiest plays")
+    for i in range(-25, 0, 1):
+        print("{}: {}".format(s[i][1], s[i][0]))
+    f = open("defense_per_play_values.txt", "w")
+    for k in sorted(DEFENSE_PER_PLAY.keys()):
+        f.write("{}\t{}\n".format(k, DEFENSE_PER_PLAY[k]))
 
 # Check the validity of / calculate the score of the new word (if any) formed
 # in a lane. 
@@ -1085,9 +981,9 @@ if RUN_TESTS:
     test_find_valid_plays()
     test_find_exchanges()
 
-compile_leave_and_defense_data(250000)
+#compile_leave_and_defense_data(250000)
 #sim(random_strat, leave_strat, log=True)
-#sim(defense_strat, greedy_strat, log=True)
+sim(defense_strat, greedy_strat, log=True)
 #compare_strats(defense_strat_mt(0.15, 25), greedy_strat, 10000)
 """
 for t in range(22, 25, 3):
