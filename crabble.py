@@ -68,7 +68,10 @@ else:
     leave_counts = {}
     leave_totals = {}
     for filenum, ct in ((1, 250000), (2, 150000), (3, 250000), (4, 100000),
-                        (5, 250000), (8, 250000), (9, 150000), (10, 250000)):
+                        (5, 250000), (8, 250000), (9, 150000), (10, 250000),
+                        (11, 100000), (12, 250000), (13, 250000), (14, 150000),
+                        (15, 250000), (16, 200000), (17, 100000), (18, 250000),
+                        (19, 250000), (20, 150000), (21, 100000), (22, 250000)):
         f = open("leaves_{}_{}.txt".format(filenum, ct), "r")
         d = [l.strip().split(',') for l in f.readlines()]
         for leave, total, count in d:
@@ -142,7 +145,10 @@ else:
     per_cell_totals = empty_defense_stats()
     per_play_counts = {}
     per_play_totals = {}
-    for filenum, ct in ((8, 250000), (9, 150000), (10, 250000),):
+    for filenum, ct in ((8, 250000), (9, 150000), (10, 250000), (11, 100000),
+                        (12, 250000), (13, 250000), (14, 150000), (15, 250000),
+                        (16, 200000), (17, 100000), (18, 250000), (19, 250000),
+                        (20, 150000), (21, 100000), (22, 250000)):
         cf = open("defense_per_cell_{}_{}.txt".format(filenum, ct), "r")
         cd_totals = eval(cf.readline().strip())
         cd_counts = eval(cf.readline().strip())
@@ -982,13 +988,13 @@ if RUN_TESTS:
     test_find_exchanges()
 
 #compile_leave_and_defense_data(250000)
-#sim(random_strat, leave_strat, log=True)
-sim(defense_strat, greedy_strat, log=True)
+sim(random_strat, leave_strat, log=True)
+#sim(defense_strat, greedy_strat, log=True)
 #compare_strats(defense_strat_mt(0.15, 25), greedy_strat, 10000)
 """
-for t in range(22, 25, 3):
-    for i in range(9, 12, 3):
+for t in range(10, 35, 5):
+    for i in range(10, 110, 10):
         print(t, i*0.01)
-        compare_strats(defense_strat_mt(i*0.01, t), greedy_strat, 10000,
+        compare_strats(defense_strat_mt(i*0.01, t), greedy_strat, 5000,
                        progress_update_every=1000)
 """
