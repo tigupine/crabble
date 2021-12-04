@@ -71,7 +71,9 @@ else:
                         (5, 250000), (8, 250000), (9, 150000), (10, 250000),
                         (11, 100000), (12, 250000), (13, 250000), (14, 150000),
                         (15, 250000), (16, 200000), (17, 100000), (18, 250000),
-                        (19, 250000), (20, 150000), (21, 100000), (22, 250000)):
+                        (19, 250000), (20, 150000), (21, 100000), (22, 250000),
+                        (23, 250000), (24, 100000), (25, 100000), (26, 250000),
+                        (27, 250000)):
         f = open("leaves_{}_{}.txt".format(filenum, ct), "r")
         d = [l.strip().split(',') for l in f.readlines()]
         for leave, total, count in d:
@@ -148,7 +150,8 @@ else:
     for filenum, ct in ((8, 250000), (9, 150000), (10, 250000), (11, 100000),
                         (12, 250000), (13, 250000), (14, 150000), (15, 250000),
                         (16, 200000), (17, 100000), (18, 250000), (19, 250000),
-                        (20, 150000), (21, 100000), (22, 250000)):
+                        (20, 150000), (21, 100000), (22, 250000), (23, 250000),
+                        (24, 100000), (25, 100000), (26, 250000), (27, 250000)):
         cf = open("defense_per_cell_{}_{}.txt".format(filenum, ct), "r")
         cd_totals = eval(cf.readline().strip())
         cd_counts = eval(cf.readline().strip())
@@ -988,8 +991,8 @@ if RUN_TESTS:
     test_find_exchanges()
 
 #compile_leave_and_defense_data(250000)
-sim(random_strat, leave_strat, log=True)
-#sim(defense_strat, greedy_strat, log=True)
+#sim(random_strat, leave_strat, log=True)
+sim(defense_strat, greedy_strat, log=True)
 #compare_strats(defense_strat_mt(0.15, 25), greedy_strat, 10000)
 """
 for t in range(10, 35, 5):
