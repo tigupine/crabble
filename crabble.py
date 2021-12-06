@@ -1,12 +1,13 @@
+import copy
 from collections import namedtuple
 import itertools
 import math
 import random
 from string import ascii_uppercase
 
-RUN_TESTS = True
-RECOMPUTE_LEAVES = True
-RECOMPUTE_DEFENSE = True
+RUN_TESTS = False
+RECOMPUTE_LEAVES = False
+RECOMPUTE_DEFENSE = False
 
 RACK_SIZE = 5
 # The layout of "premium" tiles on the board.
@@ -597,8 +598,12 @@ def test_find_exchanges():
     assert len(e) == 31
 
 def draw(bag, rack):
+    letters_drawn = []
     while bag and len(rack) < RACK_SIZE:
-        rack.append(bag.pop())
+        letter = bag.pop()
+        letters_drawn.append(letter)
+        rack.append(letter)
+    return letters_drawn
 
 def exchange(bag, rack, tiles):
     assert len(bag) >= len(tiles)
@@ -638,7 +643,7 @@ def rep_words(scored_words):
 
 # Choose a valid play uniformly at random.
 def random_strat(valid_plays, valid_exchanges, board, rack, unseen,
-                 tiles_in_bag):
+                 tiles_in_bag, bag):
     if valid_plays:
         return PLAY, random.choice(list(valid_plays))
     elif valid_exchanges:
@@ -648,7 +653,7 @@ def random_strat(valid_plays, valid_exchanges, board, rack, unseen,
 
 # Choose a play with the highest score.
 def greedy_strat(valid_plays, valid_exchanges, board, rack, unseen,
-                 tiles_in_bag):
+                 tiles_in_bag, bag):
     if valid_plays:
         return PLAY, sorted(list(valid_plays))[-1] # one of highest-scoring
     elif valid_exchanges:
@@ -661,7 +666,7 @@ def greedy_strat(valid_plays, valid_exchanges, board, rack, unseen,
 # Adjust the score of each potential move based on data from two future moves.
 # The 0.4 parameter comes from experimentation.
 def leave_strat(valid_plays, valid_exchanges, board, rack, unseen,
-                tiles_in_bag, m=0.4):
+                tiles_in_bag, bag, m=0.4):
     best_adj_score = -1000
     best_choice = PASS, None
     for v in valid_plays:
@@ -698,17 +703,17 @@ def leave_strat_m(m):
     return (lambda valid_plays, valid_exchanges, board, rack, unseen,
             tiles_in_bag : leave_strat(
                 valid_plays, valid_exchanges, board, rack, unseen,
-                tiles_in_bag, m=m))
+                tiles_in_bag, bag, m=m), bag)
 
 def defense_strat(valid_plays, valid_exchanges, board, rack, unseen,
-                tiles_in_bag, m=0.1, tile_threshold=20):
+                tiles_in_bag, bag, m=0.1, tile_threshold=20):
     # This strategy is likely to become less reliable later in the game, since
     # the board layouts get more and more specific and so the general data fits
     # less well. So, cut off the strategy once the game progresses past a
     # certain point.
     if tiles_in_bag < tile_threshold:
         return greedy_strat(valid_plays, valid_exchanges, board, rack,
-                            unseen, tiles_in_bag)
+                            unseen, tiles_in_bag, None)
     best_adj_score = -1000
     best_play = None
     for v in valid_plays:
@@ -741,14 +746,16 @@ def defense_strat(valid_plays, valid_exchanges, board, rack, unseen,
 
 def defense_strat_mt(m, t):
     return (lambda valid_plays, valid_exchanges, board, rack, unseen,
-            tiles_in_bag : defense_strat(
+            tiles_in_bag, bag: defense_strat(
                 valid_plays, valid_exchanges, board, rack, unseen,
-                tiles_in_bag, m=m, tile_threshold=t))
+                tiles_in_bag, bag, m=m, tile_threshold=t))
+
+
 
 # Assume a greedy opponent, see what they might do next turn in response, and
 # decide accordingly.
 def lookahead_1_strat(valid_plays, valid_exchanges, board, rack, unseen,
-                      tiles_in_bag, num_trials=10, num_candidates=10):
+                      tiles_in_bag, bag, num_trials=10, num_candidates=10):
     if not valid_plays:
         if valid_exchanges:
             return EXCHANGE, valid_exchanges[-1]
@@ -775,7 +782,7 @@ def lookahead_1_strat(valid_plays, valid_exchanges, board, rack, unseen,
             opp_valid_plays = find_valid_plays(board, opp_rack)
             # Skip the last four inputs because greedy_strat doesn't use them.
             choice, details = greedy_strat(
-                opp_valid_plays, opp_valid_exchanges, None, None, None, None)
+                opp_valid_plays, opp_valid_exchanges, None, None, None, None, None)
             if choice == PLAY:
                 opp_scores[i] += details[0]
             for rr, cc, _ in edits:
@@ -787,26 +794,163 @@ def lookahead_1_strat(valid_plays, valid_exchanges, board, rack, unseen,
             best_play = candidates[i]
     return PLAY, best_play
 
+
+def leave_strat(valid_plays, valid_exchanges, board, rack, unseen,
+                tiles_in_bag, bag, m=0.4):
+    best_adj_score = -1000
+    best_choice = PASS, None
+    for v in valid_plays:
+        r_copy = rack[:]
+        remove_played_tiles(r_copy, [t for _, _, t in v.edits])
+        adj_score = v.score + m * LEAVES[''.join(sorted(r_copy))]
+        if adj_score > best_adj_score:
+            best_adj_score = adj_score
+            best_choice = PLAY, v
+    for ex in valid_exchanges:
+        leave = rack[:]
+        remove_played_tiles(leave, ex)
+        adj_score = m * LEAVES[''.join(sorted(leave))]
+        if adj_score > best_adj_score:
+            best_adj_score = adj_score
+            best_choice = EXCHANGE, ex
+    return best_choice
+
+def find_next_round_scores(candidate_unseen, candidate, board, tiles_in_bag, bag, rack):
+    next_turn_score = 0
+    opp_score = 0
+
+    #Update board for candidate play and remove played letters from rack
+    edits = candidate.edits
+    for rr, cc, l in edits:
+        rack.remove(l)
+        board[rr][cc] = l
+
+    letters_drawn = draw(bag, rack)
+    for letter in letters_drawn:
+        candidate_unseen.remove(letter)
+
+    opp_rack_sim = random.sample(candidate_unseen, min(len(candidate_unseen), RACK_SIZE))
+    #Simulate opponent's turn
+    opp_valid_exchanges = (
+        find_exchanges(opp_rack_sim)
+        if tiles_in_bag - len(edits) - len(opp_rack_sim) >= RACK_SIZE
+        else [])
+    opp_valid_plays = find_valid_plays(board, opp_rack_sim)
+    # Skip the last four inputs because greedy_strat doesn't use them.
+    choice, details = greedy_strat(
+        opp_valid_plays, opp_valid_exchanges, None, None, None, None, None)
+
+    if choice == PLAY:
+        opp_score += details[0]
+        opp_edits = details[1]
+        for rr, cc, l in opp_edits:
+            candidate_unseen.remove(l)
+            if l in bag:
+                bag.remove(l)
+            board[rr][cc] = l
+
+    #Simulate player next turn
+    next_turn_valid_exchanges = (
+        find_exchanges(rack)
+        if tiles_in_bag - len(edits) - len(rack) >= RACK_SIZE
+        else [])
+    player_next_turn_valid_plays = find_valid_plays(board, rack)
+    # Skip the last four inputs because greedy_strat doesn't use them.
+    next_turn_choice, next_turn_details = greedy_strat(
+        player_next_turn_valid_plays, next_turn_valid_exchanges, None, None, None, None, None)
+
+    if next_turn_choice == PLAY:
+        next_turn_score += next_turn_details[0]
+
+    return opp_score, next_turn_score
+
+#def find_next_turn_sample():
+def score_candidate(num_candidates, unseen, candidate, board, tiles_in_bag, bag, rack, n, level=1):
+    candidate_board = copy.deepcopy(board)
+    player_rack = copy.deepcopy(rack)
+    candidate_unseen = copy.deepcopy(unseen)
+    candidate_bag = copy.deepcopy(bag)
+
+    #Find candidate score
+    opp_score, next_turn_score = \
+        find_next_round_scores(candidate_unseen, candidate, candidate_board, tiles_in_bag, candidate_bag, player_rack)
+    candidate_score = candidate.score - opp_score + next_turn_score
+
+    #Find sum of sub-tree scores
+    level_sum = 0.0
+    if n != level:
+        new_candidates = find_new_candidates(candidate_board, player_rack, num_candidates)
+        if new_candidates != []:
+            for i in range(num_candidates):
+                cand_score = score_candidate(num_candidates, candidate_unseen, new_candidates[i], candidate_board, tiles_in_bag, candidate_bag, player_rack, n, level + 1)
+                level_sum += cand_score
+    #Average sub-tree scores
+    level_score = level_sum/float(num_candidates)
+    candidate_score += level_score
+    return candidate_score
+
+def score_candidates(candidates, num_candidates, num_trials, unseen, board, tiles_in_bag, n, rack, bag):
+    #TO DO: implement multiple trials
+    candidate_scores = [0]*num_candidates
+    candidate_scores = [candidates[i].score for i in range(num_candidates)]
+    for i in range(num_candidates):
+        candidate_scores[i] += score_candidate(num_candidates, unseen, candidates[i], board, tiles_in_bag, bag, rack, n, level=1)
+    return candidate_scores
+
+def find_best_play(candidates, candidate_scores):
+    top_expected_score = max(candidate_scores)
+    best_play_index = candidate_scores.index(top_expected_score)
+    best_play = candidates[best_play_index]
+    return best_play
+
+def find_new_candidates(board, rack, num_candidates):
+    valid_plays = find_valid_plays(board, rack)
+    num_candidates = min(len(valid_plays), num_candidates)
+    candidates = sorted(list(valid_plays))[-num_candidates:]  # contains duplicate words played in different places
+    return candidates
+
+def lookahead_n_strat(valid_plays, valid_exchanges, board, rack, unseen,
+                      tiles_in_bag, bag, n = 1, num_trials=1, num_candidates=2):
+    candidates = find_new_candidates(board, rack, num_candidates)
+    if tiles_in_bag > RACK_SIZE:
+        candidate_totals = [0]*num_candidates
+        for i in range(num_trials):
+            if not valid_plays:
+                valid_exchanges = (find_exchanges(rack) if tiles_in_bag >= RACK_SIZE else [])
+                if valid_exchanges:
+                    return EXCHANGE, valid_exchanges[-1]
+                else:
+                    return PASS, None
+            candidate_scores = score_candidates(candidates, num_candidates, num_trials, unseen, board, tiles_in_bag, n, rack, bag)
+            candidate_totals = [candidate_totals[i] + candidate_scores[i] for j in range(num_candidates)]
+        best_play = find_best_play(candidates, candidate_totals)
+        return PLAY, best_play
+    else:
+        return endgame_strat(valid_plays, valid_exchanges, board, rack, unseen, tiles_in_bag, bag)
+
+#def general_strat(look_ahead_steps, num_simulations, next_turn_weight, board_score_weight,
+#                  sabotage_weight, simulation_depth)
+
 def endgame_strat(valid_plays, valid_exchanges, board, rack, unseen,
-                  tiles_in_bag):
+                  tiles_in_bag, bag):
     if len(unseen) <= 10:
         return lookahead_1_strat(valid_plays, valid_exchanges, board, rack,
-                                 unseen, tiles_in_bag)
+                                 unseen, tiles_in_bag, bag)
     else:
         return greedy_strat(valid_plays, valid_exchanges, board, rack, unseen,
-                            tiles_in_bag)
+                            tiles_in_bag, bag)
     
 # TODO: write more strats (e.g., lookahead 2?). Try to use CS238 material!
 
 # ********** END STRATEGIES **********
 
-def sim(strat1, strat2, log=False):
+def sim(strat1, strat2, log=True):
     strats = [strat1, strat2]
     scores = [0, 0]  
     record = [[], []]
     board = empty_board()
     bag = []
-    for l, f in FREQS.items():
+    for l, f in FREQS.items(): # Initialize bag
         for i in range(f):
             bag.append(l)
     random.shuffle(bag)
@@ -821,9 +965,8 @@ def sim(strat1, strat2, log=False):
         valid_plays = find_valid_plays(board, racks[active])
         valid_exchanges = (
             find_exchanges(racks[active]) if len(bag) >= RACK_SIZE else [])
-        choice, details = strats[active](
-            valid_plays, valid_exchanges, board, racks[active],
-                sorted(racks[1-active] + bag), len(bag))
+        choice, details = strats[active](valid_plays, valid_exchanges, board, racks[active],
+                                         sorted(racks[1-active] + bag), len(bag), bag)
         if choice == PLAY:
             score, edits, scored_words = details
             for rr, cc, l in edits:
@@ -972,7 +1115,6 @@ def compile_leave_and_defense_data(num_trials, log_every=100):
         f.write("{}\t{}\t{}\n".format(k, total, instances))
 
 ### BEGIN MAIN BODY ###
-
 if RUN_TESTS:
     test_score_lane()
     test_score_board()
@@ -983,8 +1125,10 @@ if RUN_TESTS:
 
 #compile_leave_and_defense_data(250000)
 #sim(random_strat, leave_strat, log=True)
-sim(defense_strat, greedy_strat, log=True)
-#compare_strats(defense_strat_mt(0.15, 25), greedy_strat, 10000)
+#sim(greedy_strat, lookahead_n_strat, log=True)
+#compare_strats(lookahead_1_strat, lookahead_n_strat, 2)
+sim(defense_strat_mt(0.15, 25), lookahead_n_strat)
+#compare_strats(defense_strat_mt(0.15, 25), lookahead_n_strat(), 1)
 """
 for t in range(22, 25, 3):
     for i in range(9, 12, 3):
