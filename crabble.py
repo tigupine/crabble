@@ -892,7 +892,10 @@ def score_candidate(num_candidates, unseen, candidate, board, tiles_in_bag, bag,
         new_candidates = find_new_candidates(candidate_board, player_rack, num_candidates)
         if new_candidates != []:
             for i in range(num_candidates):
-                cand_score = score_candidate(num_candidates, candidate_unseen, new_candidates[i], candidate_board, tiles_in_bag, candidate_bag, player_rack, n, level + 1)
+                k = i
+                if len(new_candidates) == 1:
+                    k = 0
+                cand_score = score_candidate(num_candidates, candidate_unseen, new_candidates[k], candidate_board, tiles_in_bag, candidate_bag, player_rack, n, level + 1)
                 level_sum += cand_score
     #Average sub-tree scores
     level_score = level_sum/float(num_candidates)
@@ -902,9 +905,11 @@ def score_candidate(num_candidates, unseen, candidate, board, tiles_in_bag, bag,
 def score_candidates(candidates, num_candidates, num_trials, unseen, board, tiles_in_bag, n, rack, bag):
     #TO DO: implement multiple trials
     candidate_scores = [0]*num_candidates
-    candidate_scores = [candidates[i].score for i in range(num_candidates)]
+    if len(candidates) >= num_candidates:
+        candidate_scores = [candidates[i].score for i in range(num_candidates)]
     for i in range(num_candidates):
-        candidate_scores[i] += score_candidate(num_candidates, unseen, candidates[i], board, tiles_in_bag, bag, rack, n, level=1)
+        if i < len(candidates):
+            candidate_scores[i] += score_candidate(num_candidates, unseen, candidates[i], board, tiles_in_bag, bag, rack, n, level=1)
     return candidate_scores
 
 def find_best_play(candidates, candidate_scores):
@@ -920,7 +925,7 @@ def find_new_candidates(board, rack, num_candidates):
     return candidates
 
 def lookahead_n_strat(valid_plays, valid_exchanges, board, rack, unseen,
-                      tiles_in_bag, bag, n = 1, num_trials=1, num_candidates=2):
+                      tiles_in_bag, bag, n = 1, num_trials=10, num_candidates=10):
     candidates = find_new_candidates(board, rack, num_candidates)
     if tiles_in_bag > RACK_SIZE:
         candidate_totals = [0]*num_candidates
@@ -1056,7 +1061,7 @@ def compare_strats(strat1, strat2, num_trials, log_each_game=False,
             strat1.__name__, wins[0], round(score_totals[0] / num_trials, 1),
             strat2.__name__, wins[1], round(score_totals[1] / num_trials, 1)))
     # Use a normal approximation to the binomial distribution.
-    if wins[0] > wins[1] and num_trials >= 100:
+    if num_trials >= 1:#wins[0] > wins[1] and
         print(
             "Prob. of at least this big a positive difference "
             "for equal strategies: {}".format(
@@ -1136,9 +1141,9 @@ if RUN_TESTS:
 #compile_leave_and_defense_data(250000)
 #sim(random_strat, leave_strat, log=True)
 #sim(greedy_strat, lookahead_n_strat, log=True)
-#compare_strats(lookahead_1_strat, lookahead_n_strat, 2)
-sim(defense_strat_mt(0.15, 25), lookahead_n_strat)
-#compare_strats(defense_strat_mt(0.15, 25), lookahead_n_strat(), 1)
+compare_strats(greedy_strat, lookahead_n_strat, 50)
+#sim(defense_strat_mt(0.15, 25), lookahead_n_strat)
+#compare_strats(defense_strat_mt(0.15, 25), lookahead_n_strat(), 2)
 """
 for t in range(10, 35, 5):
     for i in range(10, 110, 10):
