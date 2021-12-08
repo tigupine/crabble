@@ -324,7 +324,7 @@ def score_board(board, edits, is_across):
         board[edit_r][edit_c] = False
     return tuple(valid_plays)
 
-def test_score_board(): # TODO add more to this test!
+def test_score_board():
     ___ = False # just to make boards easier to parse visually
     b = [[___, ___, ___, ___, ___, ___, ___, ___, ___],
          [___, ___, ___, 'T', 'U', 'R', 'F', ___, ___],
@@ -930,8 +930,6 @@ def endgame_strat(valid_plays, valid_exchanges, board, rack, unseen,
     else:
         return greedy_strat(valid_plays, valid_exchanges, board, rack, unseen,
                             tiles_in_bag, bag)
-    
-# TODO: write more strats (e.g., lookahead 2?). Try to use CS238 material!
 
 # ********** END STRATEGIES **********
 
