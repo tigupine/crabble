@@ -5,7 +5,7 @@ import math
 import random
 from string import ascii_uppercase
 
-RUN_TESTS = False
+RUN_TESTS = True
 RECOMPUTE_LEAVES = False
 RECOMPUTE_DEFENSE = False
 
@@ -696,19 +696,6 @@ def leave_strat(valid_plays, valid_exchanges, board, rack, unseen,
     return best_choice
 
 # Like leave_strat, but with an adjustable m parameter.
-# Wins in 10000 games with various values of m
-"""
-0.05 5127.0, 0.1 5290.0, 0.15 5129.5, 0.2 5245.0, 0.25 5260.5, 0.3 5302.0,
-0.35 5264.0, 0.4 5329.5, 0.45 5176.0, 0.5 5165.0, 0.55 5165.5, 0.6 5132.5,
-0.65 5295.0, 0.7 5170.5, 0.75 5137.5, 0.8 5159.0, 0.85 5148.5, 0.9 5085.0,
-0.95 5135.0, 1.0 5074.0
-"""
-# Data from 5000 games in a smaller range
-"""
-0.25 2621.0, 0.27 2618.0, 0.29 2629.0, 0.31 2610.5, 0.33 2571.0,
-0.35 2599.5, 0.37 2576.5, 0.39 2601.5, 0.41 2661.0, 0.43 2568.0
-"""
-
 def leave_strat_m(m):
     return (lambda valid_plays, valid_exchanges, board, rack, unseen,
             tiles_in_bag : leave_strat(
@@ -740,27 +727,37 @@ def defense_strat(valid_plays, valid_exchanges, board, rack, unseen,
         return EXCHANGE, sorted(list(valid_exchanges))[-1] # one of biggest
     return PASS, None
 
-# Win results from 5000-game sets:
-# m=   t = 10     13     16     19     22     25
-# --------------------------------------------------
-#  0.03    2474.5 2506.5 2469   2528   2559   2533.5
-#  0.06    2497.5 2501.5 2457   2502   2450   2504.5
-#  0.09    2488   2505.5 2523   2492   2597   2507.5
-#  0.12    2509   2474.5 2410   2506.5 2513.5 2516
-#  0.15    2539.5 2555   2468.5 2499   2547.5 2517
-#  0.18    2568.5 2494.5 2541.5 2515.5 2490.  2473.5
-#  0.21    2552   2517.5 2541.5 2487   2474   2489.5
-#  0.24    2503 5 2473.5 2522   2443   2433.5 2550
-#  0.27    2513.5 2499   2519   2480   2510.5 2499
-#  0.30    2490   2455   2436   2503   2494.5 2457
-
 def defense_strat_mt(m, t):
     return (lambda valid_plays, valid_exchanges, board, rack, unseen,
             tiles_in_bag, bag: defense_strat(
                 valid_plays, valid_exchanges, board, rack, unseen,
                 tiles_in_bag, bag, m=m, tile_threshold=t))
 
-
+# Combine Leave and Defense.
+def leave_defense_strat(valid_plays, valid_exchanges, board, rack, unseen,
+                  tiles_in_bag):
+    m = 0.3
+    best_adj_score = -1000
+    best_choice = PASS, None
+    for v in valid_plays:
+        r_copy = rack[:]
+        remove_played_tiles(r_copy, [t for _, _, t in v.edits])
+        adj_score = v.score + m * LEAVES[''.join(sorted(r_copy))]
+        if tiles_in_bag >= 20:
+            played_locations_cv = tuple(
+                [(1 if l in VOWELS else 0, r, c) for r, c, l in v.edits])
+            adj_score -= m * DEFENSE_PER_PLAY[played_locations_cv]
+        if adj_score > best_adj_score:
+            best_adj_score = adj_score
+            best_choice = PLAY, v
+    for ex in valid_exchanges:
+        leave = rack[:]
+        remove_played_tiles(leave, ex)
+        adj_score = m * LEAVES[''.join(sorted(leave))]
+        if adj_score > best_adj_score:
+            best_adj_score = adj_score
+            best_choice = EXCHANGE, ex
+    return best_choice  
 
 # Assume a greedy opponent, see what they might do next turn in response, and
 # decide accordingly.
@@ -803,27 +800,6 @@ def lookahead_1_strat(valid_plays, valid_exchanges, board, rack, unseen,
             best_delta = delta
             best_play = candidates[i]
     return PLAY, best_play
-
-
-def leave_strat(valid_plays, valid_exchanges, board, rack, unseen,
-                tiles_in_bag, bag, m=0.4):
-    best_adj_score = -1000
-    best_choice = PASS, None
-    for v in valid_plays:
-        r_copy = rack[:]
-        remove_played_tiles(r_copy, [t for _, _, t in v.edits])
-        adj_score = v.score + m * LEAVES[''.join(sorted(r_copy))]
-        if adj_score > best_adj_score:
-            best_adj_score = adj_score
-            best_choice = PLAY, v
-    for ex in valid_exchanges:
-        leave = rack[:]
-        remove_played_tiles(leave, ex)
-        adj_score = m * LEAVES[''.join(sorted(leave))]
-        if adj_score > best_adj_score:
-            best_adj_score = adj_score
-            best_choice = EXCHANGE, ex
-    return best_choice
 
 def find_next_round_scores(candidate_unseen, candidate, board, tiles_in_bag, bag, rack):
     next_turn_score = 0
@@ -1140,8 +1116,8 @@ if RUN_TESTS:
 
 #compile_leave_and_defense_data(250000)
 #sim(random_strat, leave_strat, log=True)
-#sim(greedy_strat, lookahead_n_strat, log=True)
-compare_strats(greedy_strat, lookahead_n_strat, 50)
+sim(greedy_strat, lookahead_n_strat, log=True)
+#compare_strats(greedy_strat, lookahead_n_strat, 50)
 #sim(defense_strat_mt(0.15, 25), lookahead_n_strat)
 #compare_strats(defense_strat_mt(0.15, 25), lookahead_n_strat(), 2)
 """
